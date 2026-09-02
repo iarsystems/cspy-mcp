@@ -94,7 +94,7 @@ New items, roughly in priority order:
   Deduplicate/truncate, and tag it as a known backend issue with
   "retry configure_and_start once" as the recovery hint.
 
-18. [ ] Implement stopOnSymbol in the MCP server (it is a frontend contract)
+18. [x] Implement stopOnSymbol in the MCP server (it is a frontend contract)
 - With `stopOnSymbol: "main"` the session halts at `__iar_program_start`.
   Verified on both sim and J-Link: generic, not driver-specific.
 - Root cause: CSpyServer2.startSession() never reads stopOnSymbol; it is the
@@ -102,6 +102,10 @@ New items, roughly in priority order:
   VS Code DAP adapter do this). The MCP server is the frontend in this flow,
   so configure-and-start should call runToULE(stopOnSymbol) after start when
   the field is non-empty.
+- Fixed: `debugger_configure_and_start_session` now calls
+  `runToULE(stopOnSymbol, True)` after start when the field is present, and
+  reports the outcome via `stopOnSymbol`/`ranToSymbol`/`stopOnSymbolError` in
+  the response. Verified on a Cortex-M3 Simulator session.
 
 19. [ ] Add zone discovery
 - `memory_read`/`memory_write_hex`/`disassemble_range` require a `zone_id` but

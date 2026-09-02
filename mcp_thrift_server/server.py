@@ -1461,12 +1461,38 @@ def debugger_configure_and_start_session(launch_json: str) -> dict[str, Any]:
 
     debugger_configure_session(launch_json)
     debugger_start_smp_session()
+
+    # CSpyServer2.startSession() never reads stopOnSymbol itself -- running to
+    # that symbol is a frontend responsibility (both the IAR IDE and the
+    # VS Code DAP adapter do this after start). We are the frontend here, so
+    # replicate that behavior: run to the requested symbol when present.
+    stop_on_symbol = None
+    try:
+        launch_obj = json.loads(launch_json)
+        if isinstance(launch_obj, dict):
+            stop_on_symbol = launch_obj.get("stopOnSymbol")
+    except (TypeError, ValueError):
+        stop_on_symbol = None
+
+    ran_to_symbol = False
+    stop_on_symbol_error: str | None = None
+    if stop_on_symbol:
+        try:
+            _call_debugger("runToULE", stop_on_symbol, True)
+            ran_to_symbol = True
+        except Exception as exc:  # noqa: BLE001
+            stop_on_symbol_error = str(exc)
+
     out = {
         "ok": True,
         "configured": True,
         "started": True,
         "handoff": handoff,
+        "stopOnSymbol": stop_on_symbol,
+        "ranToSymbol": ran_to_symbol,
     }
+    if stop_on_symbol_error is not None:
+        out["stopOnSymbolError"] = stop_on_symbol_error
     return _response_envelope(ok=True, tool="debugger_configure_and_start_session", data=out)
 
 

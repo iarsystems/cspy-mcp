@@ -477,6 +477,104 @@ def test_debugger_configure_and_start_wrapper(server_module, monkeypatch):
     assert method_names.count("startSMPSession") == 1
 
 
+def test_debugger_configure_and_start_wrapper_runs_to_stop_on_symbol(server_module, monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        server_module,
+        "load_config",
+        lambda: SimpleNamespace(cspy_mode="external", registry_host="127.0.0.1", registry_port=49820),
+    )
+    monkeypatch.setattr(server_module, "_ensure_debug_eventhandler", lambda: {"ok": True})
+    monkeypatch.setattr(server_module, "_ensure_libsupport", lambda: {"ok": True})
+
+    def fake_call(method, *args, **kwargs):
+        calls.append((method, args, kwargs))
+        if method == "resolveLaunchConfiguration":
+            return {"resolved": True}
+        return None
+
+    monkeypatch.setattr(server_module, "_call_debugger", fake_call)
+
+    launch_json = json.dumps({"request": "launch", "stopOnSymbol": "main"})
+    out = server_module.debugger_configure_and_start_session(launch_json)
+
+    assert out["ok"] is True
+    assert out["data"]["stopOnSymbol"] == "main"
+    assert out["data"]["ranToSymbol"] is True
+    assert "stopOnSymbolError" not in out["data"]
+
+    run_to_ule_calls = [c for c in calls if c[0] == "runToULE"]
+    assert len(run_to_ule_calls) == 1
+    _, args, _ = run_to_ule_calls[0]
+    assert args == ("main", True)
+
+    # runToULE must happen after configure/start, not before.
+    method_names = [m for m, _, _ in calls]
+    assert method_names.index("startSMPSession") < method_names.index("runToULE")
+
+
+def test_debugger_configure_and_start_wrapper_without_stop_on_symbol_skips_run_to_ule(
+    server_module, monkeypatch
+):
+    calls = []
+
+    monkeypatch.setattr(
+        server_module,
+        "load_config",
+        lambda: SimpleNamespace(cspy_mode="external", registry_host="127.0.0.1", registry_port=49820),
+    )
+    monkeypatch.setattr(server_module, "_ensure_debug_eventhandler", lambda: {"ok": True})
+    monkeypatch.setattr(server_module, "_ensure_libsupport", lambda: {"ok": True})
+
+    def fake_call(method, *args, **kwargs):
+        calls.append((method, args, kwargs))
+        if method == "resolveLaunchConfiguration":
+            return {"resolved": True}
+        return None
+
+    monkeypatch.setattr(server_module, "_call_debugger", fake_call)
+
+    out = server_module.debugger_configure_and_start_session('{"request":"launch"}')
+
+    assert out["ok"] is True
+    assert out["data"]["stopOnSymbol"] is None
+    assert out["data"]["ranToSymbol"] is False
+    assert "stopOnSymbolError" not in out["data"]
+    assert all(m != "runToULE" for m, _, _ in calls)
+
+
+def test_debugger_configure_and_start_wrapper_reports_stop_on_symbol_error(server_module, monkeypatch):
+    monkeypatch.setattr(
+        server_module,
+        "load_config",
+        lambda: SimpleNamespace(cspy_mode="external", registry_host="127.0.0.1", registry_port=49820),
+    )
+    monkeypatch.setattr(server_module, "_ensure_debug_eventhandler", lambda: {"ok": True})
+    monkeypatch.setattr(server_module, "_ensure_libsupport", lambda: {"ok": True})
+
+    def fake_call(method, *args, **kwargs):
+        if method == "resolveLaunchConfiguration":
+            return {"resolved": True}
+        if method == "runToULE":
+            raise server_module.ThriftBridgeError("symbol not found: does_not_exist")
+        return None
+
+    monkeypatch.setattr(server_module, "_call_debugger", fake_call)
+
+    launch_json = json.dumps({"request": "launch", "stopOnSymbol": "does_not_exist"})
+    out = server_module.debugger_configure_and_start_session(launch_json)
+
+    # A failure to run to the requested symbol is surfaced, not fatal to the
+    # overall configure+start call: session is still reported as started.
+    assert out["ok"] is True
+    assert out["data"]["configured"] is True
+    assert out["data"]["started"] is True
+    assert out["data"]["stopOnSymbol"] == "does_not_exist"
+    assert out["data"]["ranToSymbol"] is False
+    assert "does_not_exist" in out["data"]["stopOnSymbolError"]
+
+
 def test_debugger_configure_and_start_wrapper_uses_cleanup_when_stop_fails(server_module, monkeypatch):
     monkeypatch.setattr(
         server_module,
