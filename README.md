@@ -1,5 +1,7 @@
 ﻿# MCP Thrift Server (Python)
 
+[![CI](https://github.com/iarsystems/cspy-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/iarsystems/cspy-mcp/actions/workflows/ci.yml)
+
 This project runs an MCP server that talks to a Thrift backend (C-SPY style IDL) and exposes debugger capabilities as MCP tools.
 
 Licensed under the [MIT License](LICENSE).
@@ -213,6 +215,14 @@ Run live backend tests:
 ```powershell
 pytest -q tests -m live --cspyserver2 "C:\\iar\\qtarm-10.2.1\\common\\bin\\CSpyServer2.exe"
 ```
+
+Continuous integration (GitHub Actions, `.github/workflows/ci.yml`):
+- `unit`: compile check + unit tests on Python 3.10/3.11/3.12 (Ubuntu).
+- `live-sim`: downloads the cxarm toolchain from the public
+  `iarsystems/arm` GitHub release, locates `CSpyServer2`, and runs the live
+  simulator tests plus `examples/run_live_demo.py` against the bundled
+  `test.out` ELF. Set the `IAR_LMS_BEARER_TOKEN` repository secret if license
+  checkout is required in CI. The toolchain is cached between runs.
 
 Live test assets bundled in repo:
 - `tests/live_assets/launch.json`

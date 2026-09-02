@@ -61,7 +61,12 @@ def main() -> int:
     print(json.dumps(debugger_go_and_wait_for_core_state(desired_state=0, timeout_ms=10000), indent=2, default=str))
 
     print("STEP stop_session")
-    print(json.dumps(debugger_stop_session(), indent=2, default=str))
+    try:
+        print(json.dumps(debugger_stop_session(), indent=2, default=str))
+    except Exception as exc:  # noqa: BLE001
+        # stopSession can hit a known backend assertion in standalone mode;
+        # the session itself already ran, so don't fail the demo on teardown.
+        print(f"stop_session failed (known backend teardown issue): {exc}")
     return 0
 
 
