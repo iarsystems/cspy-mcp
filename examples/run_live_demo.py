@@ -14,9 +14,13 @@ Run from the repository root:
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
-from mcp_thrift_server.server import (
+# Allow running as a plain script from anywhere: put the repo root on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from mcp_thrift_server.server import (  # noqa: E402
     breakpoints_get_all,
     breakpoints_set_on_ule,
     debugger_configure_and_start_session,
