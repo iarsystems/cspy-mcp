@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import socket
@@ -36,6 +37,24 @@ mcp = FastMCP(
     host=os.getenv("MCP_HOST", "127.0.0.1"),
     port=int(os.getenv("MCP_PORT", "8000")),
 )
+
+
+class _SuppressConnectionResetFilter(logging.Filter):
+    """Drop expected connection-reset tracebacks from thriftpy2 callback servers.
+
+    When a debug session or the managed backend process stops, its open
+    connections to our eventhandler/libsupport/listwindow listeners reset.
+    thriftpy2's TThreadedServer only swallows TTransportException and logs a
+    full traceback for ConnectionResetError; that is normal teardown, not an
+    error worth surfacing.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        exc = record.exc_info[1] if record.exc_info else None
+        return not isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError))
+
+
+logging.getLogger("thriftpy2.server").addFilter(_SuppressConnectionResetFilter())
 
 _EVENTHANDLER_LOCK = threading.Lock()
 _EVENTHANDLER_STARTED = False
