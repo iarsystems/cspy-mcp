@@ -9,6 +9,7 @@ jobs:
   unit:
     name: Unit tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +35,7 @@ jobs:
     name: Live simulator tests (cxarm)
     runs-on: ubuntu-latest
     needs: unit
+    timeout-minutes: 25
     env:
       CXARM_VERSION: "10.10.2"
       # Optional: provide an IAR license bearer token as a repository secret
@@ -81,14 +83,26 @@ jobs:
           "$CSPY" --version || true
 
       - name: Run live simulator tests (runs bundled test.out ELF)
+        timeout-minutes: 10
         run: >
           pytest -q --runxfail -m live tests
+          --timeout=240 --timeout-method=thread
           --cspyserver2 "${{ steps.cspy.outputs.path }}"
 
       - name: Run end-to-end demo against bundled ELF
+        timeout-minutes: 5
         env:
           THRIFT_CSPYSERVER_EXE: ${{ steps.cspy.outputs.path }}
         run: python examples/run_live_demo.py
+
+      - name: Show CSpyServer2 logs on failure
+        if: failure()
+        run: |
+          for f in /tmp/cspyserver2-*.log; do
+            [ -e "$f" ] || continue
+            echo "===== $f ====="
+            tail -n 200 "$f"
+          done
 
       - name: Upload CSpyServer2 logs on failure
         if: failure()

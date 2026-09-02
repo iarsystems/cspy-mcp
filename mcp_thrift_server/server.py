@@ -634,6 +634,10 @@ def _ensure_debug_eventhandler() -> dict[str, Any]:
                     client_timeout=int(os.getenv("THRIFT_EVENTHANDLER_CLIENT_TIMEOUT_MS", "3600000")),
                 )
 
+                # Per-connection handler threads must be daemon threads, or a
+                # backend connection blocked in recv (client_timeout up to 1h)
+                # prevents interpreter exit before atexit cleanup can run.
+                server.daemon = True
                 thread = threading.Thread(target=server.serve, daemon=True, name="mcp-debug-eventhandler")
                 thread.start()
                 time.sleep(0.2)
@@ -659,6 +663,10 @@ def _ensure_debug_eventhandler() -> dict[str, Any]:
                     port,
                     client_timeout=int(os.getenv("THRIFT_EVENTHANDLER_CLIENT_TIMEOUT_MS", "3600000")),
                 )
+                # Per-connection handler threads must be daemon threads, or a
+                # backend connection blocked in recv (client_timeout up to 1h)
+                # prevents interpreter exit before atexit cleanup can run.
+                server.daemon = True
                 thread = threading.Thread(target=server.serve, daemon=True, name="mcp-debug-eventhandler")
                 thread.start()
                 time.sleep(0.2)
@@ -727,6 +735,7 @@ def _ensure_libsupport() -> dict[str, Any]:
                 port,
                 client_timeout=int(os.getenv("THRIFT_LIBSUPPORT_CLIENT_TIMEOUT_MS", "3600000")),
             )
+            server.daemon = True
             thread = threading.Thread(target=server.serve, daemon=True, name="mcp-libsupport")
             thread.start()
             time.sleep(0.2)
@@ -784,6 +793,7 @@ def _ensure_listwindow_frontend() -> dict[str, Any]:
                 port,
                 client_timeout=int(os.getenv("THRIFT_LISTWINDOW_CLIENT_TIMEOUT_MS", "3600000")),
             )
+            server.daemon = True
             thread = threading.Thread(target=server.serve, daemon=True, name="mcp-listwindow-frontend")
             thread.start()
             time.sleep(0.2)
