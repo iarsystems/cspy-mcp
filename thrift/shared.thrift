@@ -283,3 +283,9 @@ struct LaunchConfiguration {
   17: string stopOnSymbol,
   18: DownloadConfiguration download,
 }
+
+struct ServiceVersion {
+  1: i32 major,
+  2: i32 minor,
+}
+
