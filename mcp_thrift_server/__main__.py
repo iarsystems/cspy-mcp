@@ -99,6 +99,16 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Service name to resolve from registry (default: debugger).",
     )
+    parser.add_argument(
+        "--registry-file",
+        dest="registry_file",
+        default=None,
+        help=(
+            "Path to a service location JSON file (e.g. RemoteControlServiceLocation.json) "
+            "describing the service registry. The file is read on each call; until it "
+            "exists, calls needing the thrift services are denied."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -141,6 +151,10 @@ def main() -> None:
         os.environ["THRIFT_REGISTRY_PORT"] = str(int(args.registry_port))
     if args.registry_service is not None:
         os.environ["THRIFT_REGISTRY_SERVICE"] = str(args.registry_service)
+
+    if args.registry_file is not None:
+        os.environ["THRIFT_CSPYSERVER_MODE"] = "standalone"
+        os.environ["THRIFT_REGISTRY_FILE"] = str(args.registry_file)
 
     cfg = load_config()
     if cfg.cspy_mode == "managed":

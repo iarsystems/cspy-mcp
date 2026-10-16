@@ -79,6 +79,16 @@ Replace the `--iar-path` argument with registry flags in any config above:
 "args": ["-m", "mcp_thrift_server", "--registry-host", "127.0.0.1", "--registry-port", "51926"]
 ```
 
+Alternatively, point at a service location file with `--registry-file <path>`
+(or `THRIFT_REGISTRY_FILE`), e.g. `RemoteControlServiceLocation.json`. The file
+is re-read on every call: while it does not exist, calls that need the thrift
+services fail with a clear error, and once it appears its host/port are used
+as the registry.
+The same file-backed registry lookup is used when registering the automatic
+`debugger.eventhandler` and `libsupport` callbacks and when discovering
+listwindow services. The MCP server can therefore start before the file exists;
+retry the affected tool after the backend creates or updates the file.
+
 Environment variables (`THRIFT_FILE`, `THRIFT_INCLUDE_DIRS`, ...) are only
 needed when your thrift IDLs live outside this repo; see
 [Backend Modes](#backend-modes) below.
@@ -150,17 +160,24 @@ Two modes, selected by `THRIFT_CSPYSERVER_MODE`.
 - It parses the backend's stdout for
   `Service registry running on local socket on port: <port>`, and restarts an
   unhealthy process when `THRIFT_CSPYSERVER_RESTART_ON_FAILURE=1`.
-
+registry-file
 ```sh
 python -m mcp_thrift_server --iar-path /opt/iar/ewarm
 ```
 
 2. `standalone`:
 - Connect to a backend someone else is running - a Thrift-enabled `iaride`, or
-  a hand-started `IarServiceLauncher`/`CSpyServer2` - using:
-  - `--registry-host`
-  - `--registry-port`
-  - optional `--registry-service` (default: `debugger`)
+  a hand-started `IarServiceLauncher`/`CSpyServer2` - preferably by pointing
+  at its `RemoteControlServiceLocation.json` service-location file:
+
+```sh
+python -m mcp_thrift_server --registry-file /path/to/RemoteControlServiceLocation.json
+```
+
+The file is re-read for each call, so the server can start before the backend
+creates it. Alternatively, connect directly with `--registry-host` and
+`--registry-port`; `--registry-service` optionally selects a service
+(`debugger` by default).
 
 `--cspyserver2` and `--service-launcher` still take individual program paths,
 overriding what `--iar-path` provides; they are rarely needed.
@@ -227,7 +244,7 @@ present.
 | --- | --- | --- |
 | `run_headless.sh <iar-path>` | **stdio** | managed: starts IarServiceLauncher + CSpyServer2 |
 | `run_web.sh <iar-path>` | HTTP on `MCP_PORT` | the same managed backend |
-| `run_iaride.sh <iar-path>` | HTTP on `MCP_PORT` | standalone: starts IarIde and resolves through its registry |
+| `run_iaride.sh <iar-path> [--workspace <file.eww>] [--registry-file <path>]` | HTTP on `MCP_PORT` | standalone: starts IarIde and resolves through its registry |
 
 `run_headless.sh` is the one to give an MCP host, since hosts launch the server
 and talk to it over stdio:
@@ -251,11 +268,19 @@ or keep it running independently of the agent.
 MCP_PORT=8123 ./run_web.sh /opt/iar/ewarm
 NO_IDE_SERVICES=1 ./run_headless.sh /opt/iar/ewarm          # debugger only
 THRIFT_IDE_SERVICES=projectmanager ./run_headless.sh /opt/iar/ewarm
+./run_iaride.sh /opt/iar/ewarm --workspace /work/demo.eww
 ```
 
 All tools are available from `run_headless.sh` and `run_web.sh`;
 `run_iaride.sh` gets the same IDE services from the GUI IDE instead. See
-[docs/ide-services.md](docs/ide-services.md).
+[docs/ide-services.md](docs/ide-services.md). `run_iaride.sh` opens the
+workspace when `--workspace` is supplied and uses its directory as the working
+directory for IarIde and the MCP server. Otherwise it uses the directory from
+which the script was invoked. In either case the registry defaults to
+`RemoteControlServiceLocation.json` in that directory; use `--registry-file`
+or `THRIFT_REGISTRY_FILE` to select another path. The server starts without
+waiting for the registry file and reports an actionable error from thrift
+tools until IarIde creates it.
 
 ## Testing (pytest)
 

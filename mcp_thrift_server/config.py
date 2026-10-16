@@ -16,6 +16,7 @@ class ThriftConfig:
     registry_host: str | None
     registry_port: int | None
     registry_service_name: str
+    registry_file: Path | None
     cspy_mode: str
     iar_path: Path | None
     cspy_executable: Path | None
@@ -131,6 +132,11 @@ def load_config() -> ThriftConfig:
     registry_port = int(registry_port_raw) if registry_port_raw else None
     registry_service_name = os.getenv("THRIFT_REGISTRY_SERVICE", "debugger")
 
+    registry_file_raw = os.getenv("THRIFT_REGISTRY_FILE")
+    registry_file = (
+        Path(registry_file_raw).expanduser().resolve() if registry_file_raw else None
+    )
+
     cspy_mode = _normalize_mode(os.getenv("THRIFT_CSPYSERVER_MODE"))
 
     # One path for the whole toolchain; the individual program paths below stay
@@ -185,6 +191,7 @@ def load_config() -> ThriftConfig:
         registry_host=registry_host,
         registry_port=registry_port,
         registry_service_name=registry_service_name,
+        registry_file=registry_file,
         cspy_mode=cspy_mode,
         iar_path=iar_path,
         cspy_executable=cspy_executable,
