@@ -228,3 +228,80 @@ def test_listwindow_reconnects_when_endpoint_changes_or_rpc_fails(
 
     assert server_module._call_listwindow("WIN_EXAMPLE", "getDisplayName") == "Example"
     assert connect_calls == 3
+
+
+def test_listwindow_uses_snapshot_service_when_registered(server_module, monkeypatch):
+    calls = []
+
+    shown = []
+
+    class SnapshotClient:
+        def getOpenWindows(self):
+            return ["Disassembly", "Watch"]
+
+        def getAvailableWindows(self):
+            return ["Disassembly", "Watch", "Locals"]
+
+        def showWindow(self, window_id, show, focus):
+            shown.append((window_id, show, focus))
+
+        def getDisplayName(self, window_id):
+            calls.append(("getDisplayName", window_id))
+            return "Disassembly window"
+
+        def getNumberOfRows(self, window_id):
+            return 2
+
+        def getRow(self, window_id, index):
+            calls.append(("getRow", window_id, index))
+            return {"row": index}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        server_module,
+        "load_config",
+        lambda: SimpleNamespace(timeout_ms=1000, include_dirs=[]),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_find_include_thrift",
+        lambda _include_dirs, filename: Path(filename),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "load_thrift_module",
+        lambda *_args: SimpleNamespace(ListWindowSnapshot=object),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_list_registry_services",
+        lambda _filter: [
+            {"name": "listwindow.snapshot", "host": "127.0.0.1", "port": 45001, "transport": 0}
+        ],
+    )
+    monkeypatch.setattr(server_module, "make_client", lambda *_a, **_k: SnapshotClient())
+    monkeypatch.setattr(
+        server_module,
+        "_ensure_listwindow_frontend",
+        lambda: pytest.fail("frontend callback server must not be needed for snapshots"),
+    )
+
+    # Case-insensitive id match; no ListWindowBackend.connect involved.
+    assert server_module._call_listwindow("disassembly", "getDisplayName") == "Disassembly window"
+    assert server_module._call_listwindow("disassembly", "isSliding") is False
+    assert server_module._call_listwindow("disassembly", "setVisibleRows", 0, 1) is None
+    rows = server_module.listwindow_get_rows("disassembly", 0, 5)
+    assert rows["row_count"] == 2 and rows["returned"] == 2
+    assert [name["name"] for name in server_module.listwindow_list_services("listwindow")] == [
+        "Disassembly",
+        "Locals",
+        "Watch",
+    ]
+    assert server_module._call_listwindow("locals", "getDisplayName") == "Disassembly window"
+    assert shown == [("Locals", True, False)]
+    with pytest.raises(server_module.ThriftBridgeError, match="Open windows: Disassembly, Watch"):
+        server_module._call_listwindow("nope", "getDisplayName")
+    with pytest.raises(server_module.ThriftBridgeError, match="not supported"):
+        server_module._call_listwindow("disassembly", "navigateToFraction", 0.5, 0, 1)
