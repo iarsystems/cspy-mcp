@@ -378,6 +378,14 @@ Live test lifecycle expectation:
 - `listwindow_get_overview(service_name)`
 - `listwindow_get_rows(service_name, first_row=0, max_rows=50)`
 - `listwindow_get_notifications(clear=False)`
+
+The `listwindow_*` tools behave the same against both backends. When a
+`listwindow.snapshot` service is registered (IarIde), they read the IDE's open
+windows read-only through it: `listwindow_list_services` lists the open window
+names, and `service_name` is a window name (matched case-insensitively). Sliding
+and trace-specific operations are not available in that mode. Otherwise
+(CSpyServer2) they use the `ListWindowBackend` services.
+
 - `project_load_workspace(file_path, fetch_dependency_data=True)`
 - `project_status()`
 - `project_get_files(project_path="", config_name="", collection="ProjFiles")`

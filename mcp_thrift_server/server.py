@@ -1337,7 +1337,75 @@ def _resolve_project_and_config(project_path: str, config_name: str) -> tuple[di
     return ctx, str(name)
 
 
+_SNAPSHOT_SERVICE = "listwindow.snapshot"
+# Snapshot windows are read-only observations; these ListWindowBackend calls
+# have no snapshot equivalent and are answered locally.
+_SNAPSHOT_LOCAL_ANSWERS: dict[str, Any] = {"isSliding": False, "setVisibleRows": None}
+_SNAPSHOT_FORWARDED = {"getDisplayName", "getListSpec", "getColumnInfo", "getNumberOfRows", "getRow"}
+
+
+def _snapshot_endpoint() -> tuple[str, int] | None:
+    """Endpoint of the ListWindowSnapshot service, or None when not registered (e.g. CSpyServer2)."""
+    try:
+        entry = next((s for s in _list_registry_services("") if s["name"] == _SNAPSHOT_SERVICE), None)
+    except Exception:  # noqa: BLE001
+        return None
+    if entry is None or int(entry.get("transport", -1)) != 0 or int(entry.get("port", 0) or 0) <= 0:
+        return None
+    return str(entry["host"]), int(entry["port"])
+
+
+def _call_listwindow_snapshot(
+    endpoint: tuple[str, int], service_name: str, method: str, args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> Any:
+    if method in _SNAPSHOT_LOCAL_ANSWERS:
+        return _SNAPSHOT_LOCAL_ANSWERS[method]
+    if method not in _SNAPSHOT_FORWARDED:
+        raise ThriftBridgeError(
+            f"'{method}' is not supported for window '{service_name}': the IDE exposes "
+            "list windows read-only through the listwindow snapshot service."
+        )
+
+    cfg = load_config()
+    thrift_path = _find_include_thrift(cfg.include_dirs, "listwindowsnapshot.thrift")
+    mod = load_thrift_module(str(thrift_path), tuple(cfg.include_dirs))
+    service = getattr(mod, "ListWindowSnapshot", None)
+    if service is None:
+        raise ThriftBridgeError("Service 'ListWindowSnapshot' not found in listwindowsnapshot.thrift")
+
+    client = make_client(service, endpoint[0], endpoint[1], timeout=cfg.timeout_ms)
+    try:
+        open_windows = [str(w) for w in _invoke_with_trace("listwindow.snapshot", "getOpenWindows", client.getOpenWindows)]
+        window_id = next(
+            (w for w in open_windows if w == service_name),
+            next((w for w in open_windows if w.lower() == service_name.lower()), None),
+        )
+        if window_id is None:
+            # Windows the IDE can show but that are currently closed are opened on demand.
+            available = [str(w) for w in _invoke_with_trace("listwindow.snapshot", "getAvailableWindows", client.getAvailableWindows)]
+            window_id = next((w for w in available if w.lower() == service_name.lower()), None)
+            if window_id is not None:
+                _invoke_with_trace("listwindow.snapshot", "showWindow", client.showWindow, window_id, True, False)
+        if window_id is None:
+            raise ThriftBridgeError(
+                f"List window '{service_name}' is not open in the IDE. "
+                f"Open windows: {', '.join(open_windows) or '<none>'}."
+            )
+        return _invoke_with_trace(
+            f"listwindow.snapshot[{window_id}]", method, getattr(client, method), window_id, *args, **kwargs
+        )
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
 def _call_listwindow(service_name: str, method: str, *args: Any, **kwargs: Any) -> Any:
+    snapshot = _snapshot_endpoint()
+    if snapshot is not None:
+        return _call_listwindow_snapshot(snapshot, service_name, method, args, kwargs)
+
     cfg = load_config()
     thrift_path = _find_include_thrift(cfg.include_dirs, "listwindow.thrift")
     mod = load_thrift_module(str(thrift_path), tuple(cfg.include_dirs))
@@ -1901,6 +1969,38 @@ def libsupport_request_input(length: int) -> str:
     return str(_call_libsupport("requestInput", int(length)))
 
 
+def _list_snapshot_windows(name_filter: str) -> list[dict[str, Any]]:
+    endpoint = _snapshot_endpoint()
+    cfg = load_config()
+    thrift_path = _find_include_thrift(cfg.include_dirs, "listwindowsnapshot.thrift")
+    mod = load_thrift_module(str(thrift_path), tuple(cfg.include_dirs))
+    client = make_client(mod.ListWindowSnapshot, endpoint[0], endpoint[1], timeout=cfg.timeout_ms)
+    try:
+        open_windows = {str(w) for w in _invoke_with_trace("listwindow.snapshot", "getOpenWindows", client.getOpenWindows)}
+        try:
+            available = {str(w) for w in _invoke_with_trace("listwindow.snapshot", "getAvailableWindows", client.getAvailableWindows)}
+        except Exception:  # noqa: BLE001
+            available = set()
+        windows = open_windows | available
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+    query = name_filter.strip().lower()
+    # "listwindow" is the tool's default filter for registry names; it does not describe window ids.
+    if query == "listwindow":
+        query = ""
+    return [
+        {
+            "name": str(w), "host": endpoint[0], "port": endpoint[1], "protocol": 0, "transport": 0,
+            "source": "snapshot", "open": str(w) in open_windows,
+        }
+        for w in sorted(map(str, windows))
+        if not query or query in str(w).lower()
+    ]
+
+
 @mcp.tool()
 def listwindow_list_services(name_filter: str = "listwindow") -> list[dict[str, Any]]:
     """List services registered in ServiceRegistry, optionally filtered by name.
@@ -1908,14 +2008,18 @@ def listwindow_list_services(name_filter: str = "listwindow") -> list[dict[str, 
     Useful to discover listwindow-like services (for example trace/list windows)
     before querying rows.
     """
-    _require_session_started("listwindow_list_services")
+    if _snapshot_endpoint() is None:
+        _require_session_started("listwindow_list_services")
+    if _snapshot_endpoint() is not None:
+        return _list_snapshot_windows(name_filter)
     return _list_registry_services(name_filter)
 
 
 @mcp.tool()
 def listwindow_get_overview(service_name: str) -> dict[str, Any]:
     """Fetch list window metadata such as display name, columns, and row count."""
-    _require_session_started("listwindow_get_overview")
+    if _snapshot_endpoint() is None:
+        _require_session_started("listwindow_get_overview")
     display_name = str(_call_listwindow(service_name, "getDisplayName"))
     columns = to_plain(_call_listwindow(service_name, "getColumnInfo"))
     spec = to_plain(_call_listwindow(service_name, "getListSpec"))
@@ -1946,7 +2050,8 @@ def listwindow_get_rows(service_name: str, first_row: int = 0, max_rows: int = 5
         first_row: Start row index.
         max_rows: Maximum rows to fetch.
     """
-    _require_session_started("listwindow_get_rows")
+    if _snapshot_endpoint() is None:
+        _require_session_started("listwindow_get_rows")
     start = max(0, int(first_row))
     count = max(1, int(max_rows))
 
