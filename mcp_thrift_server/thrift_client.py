@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from dataclasses import replace
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -68,11 +70,42 @@ def load_service_registry_module(include_dirs: tuple[str, ...]):
         raise ThriftBridgeError("Failed to load ServiceRegistry.thrift") from exc
 
 
-def resolve_service_endpoint(config: ThriftConfig, service_name: str) -> tuple[str, int]:
+def _config_from_registry_file(config: ThriftConfig) -> ThriftConfig:
+    """Point the config at the registry named by the service-location file.
+
+    The file is read on every call, so it may appear (or change) after the
+    server started. Format: {"1":{"str":host},"2":{"i32":port},...}.
+    """
+    path = config.registry_file
+    if not path.is_file():
+        raise ThriftBridgeError(
+            f"Service registry location file not found: {path}. "
+            "The thrift services are unavailable until it exists."
+        )
     try:
-        config = apply_managed_registry_to_config(config)
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        host = str(data["1"]["str"])
+        port = int(data["2"]["i32"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ThriftBridgeError(
+            f"Service registry location file {path} is unreadable or malformed: {exc}"
+        ) from exc
+    return replace(config, registry_host=host, registry_port=port)
+
+
+def resolve_registry_config(config: ThriftConfig) -> ThriftConfig:
+    """Resolve the active registry location from the configured source."""
+    if config.registry_file is not None:
+        return _config_from_registry_file(config)
+
+    try:
+        return apply_managed_registry_to_config(config)
     except Exception as exc:  # noqa: BLE001
         raise ThriftBridgeError(f"Failed to prepare managed CSpyServer2: {exc}") from exc
+
+
+def resolve_service_endpoint(config: ThriftConfig, service_name: str) -> tuple[str, int]:
+    config = resolve_registry_config(config)
 
     if config.registry_port is None:
         if service_name == "debugger":

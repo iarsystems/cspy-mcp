@@ -17,7 +17,6 @@ from mcp.server.fastmcp import FastMCP
 
 from .config import load_config
 from .cspy_server_manager import (
-    apply_managed_registry_to_config,
     managed_server_crash_diagnostics,
     managed_server_status,
     shutdown_managed_server,
@@ -42,6 +41,7 @@ from .thrift_client import (
     load_service_registry_module,
     load_thrift_module,
     open_debugger_client,
+    resolve_registry_config,
     resolve_service_endpoint,
     to_plain,
 )
@@ -96,7 +96,7 @@ _LISTWINDOW_HOST = ""
 _LISTWINDOW_PORT = 0
 _LISTWINDOW_SERVER: Any | None = None
 _LISTWINDOW_THREAD: threading.Thread | None = None
-_LISTWINDOW_CONNECTED: set[str] = set()
+_LISTWINDOW_CONNECTED: dict[str, tuple[str, int]] = {}
 _LISTWINDOW_NOTES: deque[dict[str, Any]] = deque(maxlen=500)
 _LISTWINDOW_TOOLBAR_NOTES: deque[dict[str, Any]] = deque(maxlen=500)
 
@@ -619,10 +619,7 @@ def _ensure_debug_eventhandler() -> dict[str, Any]:
         return {"ok": False, "reason": "auto-eventhandler-disabled"}
 
     cfg = load_config()
-    try:
-        cfg = apply_managed_registry_to_config(cfg)
-    except Exception as exc:  # noqa: BLE001
-        raise ThriftBridgeError(f"Failed to prepare managed CSpyServer2: {exc}") from exc
+    cfg = resolve_registry_config(cfg)
     if cfg.registry_port is None:
         return {"ok": False, "reason": "no-registry-port"}
 
@@ -742,10 +739,7 @@ def _ensure_libsupport() -> dict[str, Any]:
         return {"ok": False, "reason": "auto-libsupport-disabled"}
 
     cfg = load_config()
-    try:
-        cfg = apply_managed_registry_to_config(cfg)
-    except Exception as exc:  # noqa: BLE001
-        raise ThriftBridgeError(f"Failed to prepare managed CSpyServer2: {exc}") from exc
+    cfg = resolve_registry_config(cfg)
     if cfg.registry_port is None:
         return {"ok": False, "reason": "no-registry-port"}
 
@@ -847,6 +841,51 @@ def _ensure_listwindow_frontend() -> dict[str, Any]:
         "host": _LISTWINDOW_HOST,
         "port": _LISTWINDOW_PORT,
     }
+
+
+def _call_listwindow_backend(
+    client: Any,
+    mod: Any,
+    service_name: str,
+    host: str,
+    port: int,
+    method: str,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    category: str,
+) -> Any:
+    endpoint = (host, int(port))
+    try:
+        with _LISTWINDOW_LOCK:
+            needs_connect = _LISTWINDOW_CONNECTED.get(service_name) != endpoint
+
+        if needs_connect:
+            listener = mod.ServiceRegistry.ServiceLocation(
+                host=_LISTWINDOW_HOST,
+                port=_LISTWINDOW_PORT,
+                protocol=mod.ServiceRegistry.Protocol.Binary,
+                transport=mod.ServiceRegistry.Transport.Socket,
+            )
+            _invoke_with_trace(f"{category}", "connect", client.connect, listener)
+            with _LISTWINDOW_LOCK:
+                _LISTWINDOW_CONNECTED[service_name] = endpoint
+
+        fn = getattr(client, method, None)
+        if fn is None or not callable(fn):
+            raise ThriftBridgeError(f"ListWindowBackend method not found: {method}")
+        return _invoke_with_trace(
+            f"{category}[{service_name}]", method, fn, *args, **kwargs
+        )
+    except Exception:
+        with _LISTWINDOW_LOCK:
+            if _LISTWINDOW_CONNECTED.get(service_name) == endpoint:
+                _LISTWINDOW_CONNECTED.pop(service_name, None)
+        raise
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
 
 
 def _call_debugger(method: str, *args: Any, **kwargs: Any) -> Any:
@@ -1138,10 +1177,7 @@ def _ensure_ide_service(key: str, force: bool = False) -> dict[str, Any]:
             }
 
         cfg = load_config()
-        try:
-            cfg = apply_managed_registry_to_config(cfg)
-        except Exception as exc:  # noqa: BLE001
-            raise ThriftBridgeError(f"Failed to prepare the IAR backend: {exc}") from exc
+        cfg = resolve_registry_config(cfg)
 
         if cfg.registry_port is None:
             raise ThriftBridgeError(
@@ -1367,30 +1403,9 @@ def _call_listwindow(service_name: str, method: str, *args: Any, **kwargs: Any) 
         host, port = resolve_service_endpoint(cfg, service_name)
 
     client = make_client(service, host, port, timeout=cfg.timeout_ms)
-    try:
-        with _LISTWINDOW_LOCK:
-            needs_connect = service_name not in _LISTWINDOW_CONNECTED
-
-        if needs_connect:
-            listener = mod.ServiceRegistry.ServiceLocation(
-                host=_LISTWINDOW_HOST,
-                port=_LISTWINDOW_PORT,
-                protocol=mod.ServiceRegistry.Protocol.Binary,
-                transport=mod.ServiceRegistry.Transport.Socket,
-            )
-            _invoke_with_trace("listwindow", "connect", client.connect, listener)
-            with _LISTWINDOW_LOCK:
-                _LISTWINDOW_CONNECTED.add(service_name)
-
-        fn = getattr(client, method, None)
-        if fn is None or not callable(fn):
-            raise ThriftBridgeError(f"ListWindowBackend method not found: {method}")
-        return _invoke_with_trace(f"listwindow[{service_name}]", method, fn, *args, **kwargs)
-    finally:
-        try:
-            client.close()
-        except Exception:
-            pass
+    return _call_listwindow_backend(
+        client, mod, service_name, host, port, method, args, kwargs, "listwindow"
+    )
 
 
 def _call_trace_listwindow(service_name: str, method: str, *args: Any, **kwargs: Any) -> Any:
@@ -1418,35 +1433,22 @@ def _call_trace_listwindow(service_name: str, method: str, *args: Any, **kwargs:
         raise ThriftBridgeError(f"Trace listwindow service has invalid endpoint: {service_name}")
 
     client = make_client(service, host, port, timeout=cfg.timeout_ms)
-    try:
-        with _LISTWINDOW_LOCK:
-            needs_connect = service_name not in _LISTWINDOW_CONNECTED
-
-        if needs_connect:
-            listener = mod.ServiceRegistry.ServiceLocation(
-                host=_LISTWINDOW_HOST,
-                port=_LISTWINDOW_PORT,
-                protocol=mod.ServiceRegistry.Protocol.Binary,
-                transport=mod.ServiceRegistry.Transport.Socket,
-            )
-            _invoke_with_trace("trace_listwindow", "connect", client.connect, listener)
-            with _LISTWINDOW_LOCK:
-                _LISTWINDOW_CONNECTED.add(service_name)
-
-        fn = getattr(client, method, None)
-        if fn is None or not callable(fn):
-            raise ThriftBridgeError(f"TraceListWindowBackend method not found: {method}")
-        return _invoke_with_trace(f"trace_listwindow[{service_name}]", method, fn, *args, **kwargs)
-    finally:
-        try:
-            client.close()
-        except Exception:
-            pass
+    return _call_listwindow_backend(
+        client,
+        mod,
+        service_name,
+        host,
+        port,
+        method,
+        args,
+        kwargs,
+        "trace_listwindow",
+    )
 
 
 def _list_registry_services(name_filter: str = "") -> list[dict[str, Any]]:
     cfg = load_config()
-    cfg = apply_managed_registry_to_config(cfg)
+    cfg = resolve_registry_config(cfg)
     if cfg.registry_port is None:
         raise ThriftBridgeError("THRIFT_REGISTRY_PORT is required to query services")
 

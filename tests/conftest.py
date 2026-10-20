@@ -37,7 +37,7 @@ def reset_server_state(server_module):
 
     server_module._LISTWINDOW_NOTES = deque(maxlen=500)
     server_module._LISTWINDOW_TOOLBAR_NOTES = deque(maxlen=500)
-    server_module._LISTWINDOW_CONNECTED = set()
+    server_module._LISTWINDOW_CONNECTED = {}
     server_module._set_session_state(configured=True, started=True)
 
     yield

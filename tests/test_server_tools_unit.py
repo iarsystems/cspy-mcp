@@ -1064,7 +1064,7 @@ def test_debugger_strict_cleanup_stops_and_resets_state(server_module, monkeypat
     monkeypatch.setattr(server_module, "shutdown_managed_server", lambda: None)
 
     server_module._set_session_state(configured=True, started=True)
-    server_module._LISTWINDOW_CONNECTED.add("WIN_X")
+    server_module._LISTWINDOW_CONNECTED["WIN_X"] = ("127.0.0.1", 1234)
     server_module._LISTWINDOW_NOTES.append({"k": "v"})
     server_module._LIBSUPPORT_INPUT_BYTES.extend(b"abc")
 
@@ -1073,7 +1073,7 @@ def test_debugger_strict_cleanup_stops_and_resets_state(server_module, monkeypat
     assert out["tool"] == "debugger_strict_cleanup"
     assert out["data"]["before"] == {"configured": True, "started": True}
     assert out["data"]["after"] == {"configured": False, "started": False}
-    assert server_module._LISTWINDOW_CONNECTED == set()
+    assert server_module._LISTWINDOW_CONNECTED == {}
     assert len(server_module._LISTWINDOW_NOTES) == 0
     assert len(server_module._LIBSUPPORT_INPUT_BYTES) == 0
     assert "reset" in calls
