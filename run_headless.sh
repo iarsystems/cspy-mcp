@@ -12,7 +12,7 @@
 #   ./run_headless.sh <iar-path>
 #
 # <iar-path> is an IAR installation or build stage, i.e. the directory with
-# under it. Every program used here is taken from <iar-path>/common/bin.
+# common/bin under it. Every program used here is taken from <iar-path>/common/bin.
 #
 # Point an MCP host at it, for example in .mcp.json:
 #
@@ -33,8 +33,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# MCP hosts invoke this by absolute path from their own project directory, so cd
-# here for `python -m mcp_thrift_server` to find the package and the thrift/ IDL.
+# Run the server from the checkout without installing it. Its dependencies,
+# including iar-cspy (https://github.com/iarsystems/cspy-py), must be installed,
+# e.g. into .venv with `pip install -r requirements.txt`.
+export PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
+# MCP hosts invoke this by absolute path from their own project directory; the
+# PYTHONPATH above is what lets `python -m iar_cspy_mcp` find the server.
 cd "$SCRIPT_DIR"
 
 PYTHON="$SCRIPT_DIR/.venv/bin/python3"
@@ -46,7 +50,7 @@ IAR_INSTALL_PATH="${1:-${IAR_INSTALL_PATH:-}}"
 [ "$#" -gt 0 ] && shift
 
 # Diagnostics go to stderr: on stdio, stdout carries the MCP protocol and
-# nothing else. The backends' own output is captured to log files by the bridge.
+# nothing else. The backends' own output is captured to log files by the server.
 if [ -z "$IAR_INSTALL_PATH" ]; then
   echo "Path to an IAR installation is required." >&2
   echo "Pass it as the first argument or set IAR_INSTALL_PATH." >&2
@@ -81,4 +85,4 @@ echo "IAR installation: $IAR_INSTALL_PATH (MCP over stdio)" >&2
 # Any remaining arguments are forwarded to the module. exec'ing keeps this
 # script's pid, so the MCP host's signals reach the server directly; it installs
 # its own SIGTERM handler and tears the backends down on the way out.
-exec "$PYTHON" -m mcp_thrift_server "${ARGS[@]}" "$@"
+exec "$PYTHON" -m iar_cspy_mcp "${ARGS[@]}" "$@"
