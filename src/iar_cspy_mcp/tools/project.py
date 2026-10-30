@@ -157,6 +157,10 @@ def project_get_launch_config(project_path: str = "", config_name: str = "") -> 
     Debugger.configureSession (see project_configure_and_start_debug), with no
     hand-written launch.json needed.
 
+    Older products (IDE platform before 9.5, e.g. EWARM 9.70) lack this call
+    and fail with UNSUPPORTED_METHOD; use debugger_configure_and_start_session
+    with a launch JSON (including "driverOptions") instead.
+
     Args:
         project_path: .ewp path; empty means the current project.
         config_name: Configuration name; empty means the current one.
@@ -183,6 +187,9 @@ def project_configure_and_start_debug(
     2) ProjectManager.GetLaunchConfigurationForConfiguration
     3) Debugger.configureSession with that launch configuration
     4) optional Debugger.startSMPSession
+
+    Not available on older products (IDE platform before 9.5): see
+    project_get_launch_config.
 
     Args:
         project_path: .ewp path; empty means the current project.
