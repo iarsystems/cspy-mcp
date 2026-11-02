@@ -86,6 +86,23 @@ already-running backend to connect to. The installation is the directory with
 needs to ship `CSpyServer2`; the backend is then started for you. The project
 and options tools also need `IarServiceLauncher`.
 
+The minimum required IAR product version depends on the architecture:
+
+
+| Architecture | Minimum version |
+|--------------|-----------------|
+| Arm          | v8.40.1         |
+| RISC-V       | v3.10.1         |
+| AVR          | v8.10.1         |
+| RH850        | v3.10.1         |
+| RL78         | v5.10.1         |
+| RX           | v5.10.1         |
+| MSP430       | v8.10.2         |
+
+
+Some functionality may only be available on newer versions;
+we recommend using the latest IAR product version for your architecture, if possible.
+
 ## Backend modes
 
 - **managed** (default): given an IAR installation (`--iar-path` or

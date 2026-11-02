@@ -119,6 +119,12 @@ def debugger_configure_session(launch_json: str) -> dict[str, Any]:
     1) resolveLaunchConfiguration(launch_json)
     2) configureSession(config)
 
+    Older products (IDE platform before 9.5, e.g. EWARM 9.70) lack both: the
+    session configuration is then built by the server from the IAR
+    installation, and the launch JSON must include "driverOptions".
+    The installation must be known: the server's IAR_INSTALL_PATH,
+    or "workbenchPath" in the launch JSON.
+
     Important:
         This tool does not start execution/session context. Call
         debugger_start_smp_session() after this tool succeeds.
@@ -162,6 +168,10 @@ def debugger_configure_session(launch_json: str) -> dict[str, Any]:
 @mcp.tool()
 def debugger_start_smp_session() -> dict[str, Any]:
     """Start session execution context via Debugger.startSMPSession().
+
+    On older products without it (see debugger_configure_session), this runs
+    Debugger.startSession, then the device macros, the flash loader, the setup
+    macros and loads the program.
 
     Returns:
         {"ok": True} on success.
