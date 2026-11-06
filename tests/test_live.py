@@ -66,7 +66,7 @@ def test_discovery_and_read_only_calls(server, cspy_launch):
 
 def cli_args(config) -> list[str]:
     if config.mode == "standalone":
-        return ["--registry-host", config.registry_host or "127.0.0.1", "--registry-port", str(config.registry_port)]
+        return ["--registry-uri", config.registry_uri]
     if config.iar_path is not None:
         return ["--iar-path", str(config.iar_path)]
     return ["--cspyserver2", str(config.cspy_executable)]

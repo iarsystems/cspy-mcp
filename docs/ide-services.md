@@ -18,6 +18,10 @@ works, is in its guide:
   backend that hosts them already, such as a Thrift-enabled `iaride` or a
   hand-started `IarServiceLauncher -standalone -sockets`.
 
+These flags (and `--auto-discovery`/`--workspace` discovery) are `iar_cspy.cli`'s,
+shared by every `iar-cspy`-based tool; see the main [README](../README.md#command-line)
+and cspy-py's `connecting.md`/`guide.md` for the full, current connection reference.
+
 `run_headless.sh` wraps managed mode for stdio, which is what an MCP host
 wants:
 

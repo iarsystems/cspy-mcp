@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from iar_cspy import Config, CSpyError, SessionError
+from iar_cspy import Client, Config, CSpyError, NotConnectedError, SessionError
 from iar_cspy.testing import cspy_exception, fake_client
 
 LAUNCH_JSON = '{"request":"launch"}'
@@ -88,6 +88,21 @@ def test_thrift_connection_info_separates_discovered_endpoint(server, monkeypatc
         info = server.thrift_connection_info()
         assert info["config"]["registry_uri"] is None
         assert info["backend"]["connected_registry_uri"] == "thrift://10.0.0.8:51926"
+    finally:
+        server.set_client(None)
+        client.close()
+
+
+def test_not_connected_is_a_clear_error(server, tmp_path):
+    """Remote-control discovery finding nothing yet is reported plainly, not a crash."""
+    config = Config(
+        mode="standalone", auto_discovery_enabled=True, auto_discovery_dir=tmp_path, host_ide_services=False
+    )
+    client = Client(config, owns_backend=True)
+    server.set_client(client)
+    try:
+        with pytest.raises(NotConnectedError, match="debugger"):
+            server.debugger_is_online()
     finally:
         server.set_client(None)
         client.close()

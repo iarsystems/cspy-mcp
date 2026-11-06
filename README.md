@@ -72,7 +72,13 @@ From a checkout without installing, `run_headless.sh <iar-path>` does the same
 over stdio (see [Helper scripts](#helper-scripts-linuxmacos)).
 
 **An already-running backend** (standalone mode): replace `--iar-path` with
-its service registry:
+its service registry, either by discovering it...
+
+```json
+"args": ["--auto-discovery", "--workspace", "/path/to/project.eww"]
+```
+
+...or by pointing at it directly, if you already know its port:
 
 ```json
 "args": ["--registry-host", "127.0.0.1", "--registry-port", "51926"]
@@ -114,34 +120,46 @@ we recommend using the latest IAR product version for your architecture, if poss
   session gets a fresh one. Installations without the launcher, or
   `--no-ide-services`, run CSpyServer2 alone, without the project and options
   tools.
-- **standalone**: `--registry-host`/`--registry-port` (or
-  `THRIFT_REGISTRY_PORT`) connect to the registry of a backend someone else
-  runs, such as a Thrift-enabled `iaride` or a hand-started
+- **standalone**: connect to the registry of a backend someone else runs,
+  such as a Thrift-enabled `iaride` or a hand-started
   CSpyServer2/IarServiceLauncher. The port is that of the service registry,
-  not of the debugger service itself. Nothing is started or stopped.
+  not of the debugger service itself. Nothing is started or stopped. Either
+  point at it directly (`--registry-host`/`--registry-port`, or
+  `--registry-uri thrift://host:port`), or discover it (on by default in
+  standalone mode; `--auto-discovery` makes it explicit, optionally narrowed
+  with `--workspace <file.eww>`): the server looks for the `*.remote` file the
+  IDE writes (default `~/.iar/auto_discovery`) and keeps trying until one
+  appears, so it can start before the backend does.
 
 See [docs/ide-services.md](docs/ide-services.md) for the IDE services, and
-the [backend notes](https://github.com/iarsystems/cspy-py/blob/main/docs/backend-notes.md)
+cspy-py's docs for the rest:
+[guide.md](https://github.com/iarsystems/cspy-py/blob/main/docs/guide.md) for
+the full connection reference,
+[connecting.md](https://github.com/iarsystems/cspy-py/blob/main/docs/connecting.md)
+for how a registry is found and used, and
+[backend-notes.md](https://github.com/iarsystems/cspy-py/blob/main/docs/backend-notes.md)
 for known backend behavior.
 
 ### Command line
 
+All backend/connection flags (`--iar-path`, `--registry-uri`,
+`--auto-discovery`, `--workspace`, ...) come from `iar_cspy.cli`'s shared
+`add_connection_arguments`, unchanged — this server adds none of its own, so
+`iar-cspy-mcp --help` is the authoritative, always-current list; cspy-py's
+[guide.md](https://github.com/iarsystems/cspy-py/blob/main/docs/guide.md) and
+[connecting.md](https://github.com/iarsystems/cspy-py/blob/main/docs/connecting.md)
+explain what they mean and how connecting works. This server only adds:
+
 | Option | Meaning |
 | --- | --- |
-| `--iar-path PATH` | IAR installation (managed mode). Normally the only option needed. |
-| `--cspyserver2 PATH`, `--service-launcher PATH` | Individual program paths, overriding `--iar-path`. |
-| `--cspyserver2-args ARGS` | CSpyServer2 arguments when it runs alone (default `-standalone -sockets`). |
-| `--no-ide-services`, `--ide-services LIST` | Host no IDE services, or only `projectmanager`/`options`. |
-| `--registry-host HOST`, `--registry-port PORT` | Connect to a running backend (standalone mode). |
-| `--registry-service NAME` | Registry name of the debugger service (default `debugger`). |
 | `--web`, `--web-port PORT` | Serve MCP over streamable HTTP at `http://127.0.0.1:8000/mcp` (or `PORT`) instead of stdio. |
 | `--probe-cspyserver2` | Start the managed backend, print its registry, exit. |
 
-Every option also has an environment variable; see
-[`.env.example`](.env.example). `MCP_TRANSPORT=streamable-http`,
-`MCP_HOST` and `MCP_PORT` select the network transport without `--web`;
-`MCP_HOST=0.0.0.0` listens on all interfaces, which exposes the debugger to
-the network.
+Every connection flag also has an environment variable (`Config.from_env`);
+see [`.env.example`](.env.example) for the full, current list.
+`MCP_TRANSPORT=streamable-http`, `MCP_HOST` and `MCP_PORT` select the network
+transport without `--web`; `MCP_HOST=0.0.0.0` listens on all interfaces,
+which exposes the debugger to the network.
 
 On stdio the server logs every backend RPC to stderr (`[thrift] call ...`),
 which MCP hosts collect as server logs; stdout carries only the protocol.
@@ -156,7 +174,7 @@ takes the IAR path as its first argument or from `IAR_INSTALL_PATH`, and uses
 | --- | --- | --- |
 | `run_headless.sh <iar-path>` | stdio | managed: IarServiceLauncher + CSpyServer2 |
 | `run_web.sh <iar-path>` | HTTP on `MCP_PORT` | the same managed backend |
-| `run_iaride.sh <iar-path>` | HTTP on `MCP_PORT` | standalone: starts IarIde and uses its registry |
+| `run_iaride.sh <iar-path>` | HTTP on `MCP_PORT` | standalone: starts IarIde and discovers its registry |
 
 `NO_IDE_SERVICES=1` and `THRIFT_IDE_SERVICES=projectmanager` restrict what
 the managed backend hosts. On Windows, run `iar-cspy-mcp` (or
