@@ -71,11 +71,26 @@ def test_session_gate(server, fake):
 
 def test_thrift_connection_info(server, fake):
     info = server.thrift_connection_info()
-    assert info["registry_port"] == 4711
-    assert info["cspy_mode"] == "standalone"
-    assert info["ide_services"] == ["options", "projectmanager"]
-    assert "managed_server" not in info
+    assert info["config"]["registry_uri"] == fake[0].config.registry_uri
+    assert info["backend"]["connected_registry_uri"] == "thrift://127.0.0.1:4711"
+    assert info["backend"]["registry_configured"] is True
+    assert info["config"]["mode"] == "standalone"
+    assert info["config"]["ide_services"] == []
     json.dumps(info)
+
+
+def test_thrift_connection_info_separates_discovered_endpoint(server, monkeypatch):
+    client, _ = fake_client(Config(mode="standalone", auto_discovery_enabled=True))
+    client.debugger.set_state(configured=True, started=True)
+    monkeypatch.setattr(client.backend, "current_registry_endpoint", lambda: ("10.0.0.8", 51926))
+    server.set_client(client)
+    try:
+        info = server.thrift_connection_info()
+        assert info["config"]["registry_uri"] is None
+        assert info["backend"]["connected_registry_uri"] == "thrift://10.0.0.8:51926"
+    finally:
+        server.set_client(None)
+        client.close()
 
 
 def test_debugger_wrappers(server, fake):
