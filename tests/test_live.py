@@ -10,7 +10,7 @@ import pytest
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
-from iar_cspy import Client
+from iar_cspy import Client, parse_registry_uri
 
 pytestmark = pytest.mark.live
 
@@ -66,7 +66,8 @@ def test_discovery_and_read_only_calls(server, cspy_launch):
 
 def cli_args(config) -> list[str]:
     if config.mode == "standalone":
-        return ["--registry-host", config.registry_host or "127.0.0.1", "--registry-port", str(config.registry_port)]
+        host, port = parse_registry_uri(config.registry_uri)
+        return ["--registry-host", host, "--registry-port", str(port)]
     if config.iar_path is not None:
         return ["--iar-path", str(config.iar_path)]
     return ["--cspyserver2", str(config.cspy_executable)]

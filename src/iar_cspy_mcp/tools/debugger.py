@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from iar_cspy import StopResult, to_plain
+from iar_cspy import StopResult, parse_registry_uri, to_plain
 from iar_cspy.debugger import PRE_SESSION_METHODS
 from iar_cspy.errors import DC_RESULTS, ERROR_CODES, FOCUSED_DC_RESULTS, error_entry
 from iar_cspy.events import LOG_CATEGORY_PREFIXES
@@ -28,14 +28,16 @@ def thrift_connection_info() -> dict[str, Any]:
     client = get_client()
     cfg = client.config
     endpoint = client.backend.current_registry_endpoint()
+    if endpoint is None and cfg.registry_uri:
+        endpoint = parse_registry_uri(cfg.registry_uri)
     info = {
         "host": cfg.host,
         "port": cfg.port,
         "timeout_ms": cfg.timeout_ms,
         "thrift_file": str(cfg.thrift_file),
         "include_dirs": list(cfg.include_dirs),
-        "registry_host": endpoint[0] if endpoint else cfg.registry_host,
-        "registry_port": endpoint[1] if endpoint else cfg.registry_port,
+        "registry_host": endpoint[0] if endpoint else None,
+        "registry_port": endpoint[1] if endpoint else None,
         "registry_service_name": cfg.registry_service_name,
         "cspy_mode": cfg.mode,
         "cspy_executable": str(cfg.cspy_executable) if cfg.cspy_executable else None,

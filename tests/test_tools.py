@@ -78,6 +78,13 @@ def test_thrift_connection_info(server, fake):
     json.dumps(info)
 
 
+def test_thrift_connection_info_without_a_resolved_registry(server, fake, monkeypatch):
+    client, _ = fake
+    monkeypatch.setattr(client.backend, "current_registry_endpoint", lambda: None)
+    info = server.thrift_connection_info()
+    assert (info["registry_host"], info["registry_port"]) == ("127.0.0.1", 4711)
+
+
 def test_debugger_wrappers(server, fake):
     _, rpc = fake
     for method, response in {

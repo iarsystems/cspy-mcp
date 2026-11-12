@@ -23,7 +23,12 @@ def test_iar_path_selects_managed_mode_and_drops_a_stale_registry(tmp_path):
         THRIFT_REGISTRY_PORT="5000",
         THRIFT_REGISTRY_HOST="10.0.0.5",
     )
-    assert (cfg.mode, cfg.iar_path, cfg.registry_port, cfg.registry_host) == ("managed", tmp_path, None, None)
+    assert (cfg.mode, cfg.iar_path, cfg.registry_uri) == ("managed", tmp_path, None)
+
+
+def test_iar_path_drops_a_stale_registry_uri(tmp_path):
+    cfg = config(["--iar-path", str(tmp_path)], THRIFT_REGISTRY_URI="thrift://10.0.0.5:5000")
+    assert (cfg.mode, cfg.registry_uri) == ("managed", None)
 
 
 def test_explicit_programs_override_the_installation(tmp_path):
@@ -47,6 +52,11 @@ def test_no_ide_services_drops_the_launcher(tmp_path):
 
 def test_a_registry_selects_standalone_mode():
     cfg = config(["--registry-port", "5000", "--registry-host", "10.0.0.5", "--registry-service", "dbg"])
-    assert (cfg.mode, cfg.registry_host, cfg.registry_port, cfg.registry_service_name) == (
-        "standalone", "10.0.0.5", 5000, "dbg",
+    assert (cfg.mode, cfg.registry_uri, cfg.registry_service_name) == (
+        "standalone", "thrift://10.0.0.5:5000", "dbg",
     )
+
+
+def test_registry_flags_override_a_registry_uri_from_the_environment():
+    cfg = config(["--registry-port", "5000"], THRIFT_REGISTRY_URI="thrift://10.0.0.5:6000")
+    assert cfg.registry_uri == "thrift://127.0.0.1:5000"

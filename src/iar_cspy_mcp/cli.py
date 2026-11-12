@@ -123,6 +123,7 @@ def config_from_args(args: argparse.Namespace, environ: dict[str, str] | None = 
         # Stale standalone-mode registry settings must not pin managed startup
         # to an old port. A fixed registry is still possible with
         # --cspyserver2-args "... -registry <port>".
+        env.pop("THRIFT_REGISTRY_URI", None)
         env.pop("THRIFT_REGISTRY_PORT", None)
         env.pop("THRIFT_REGISTRY_HOST", None)
     if args.cspyserver2:
@@ -130,6 +131,9 @@ def config_from_args(args: argparse.Namespace, environ: dict[str, str] | None = 
     if args.cspyserver2_args:
         env["THRIFT_CSPYSERVER_ARGS"] = args.cspyserver2_args
 
+    if args.registry_host is not None or args.registry_port is not None:
+        # THRIFT_REGISTRY_URI takes precedence over host/port in Config.from_env.
+        env.pop("THRIFT_REGISTRY_URI", None)
     if args.registry_host is not None:
         env["THRIFT_CSPYSERVER_MODE"] = "standalone"
         env["THRIFT_REGISTRY_HOST"] = str(args.registry_host)
