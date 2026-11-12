@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from iar_cspy_mcp.cli import _parse_args, config_from_args
 
 
@@ -60,3 +62,25 @@ def test_a_registry_selects_standalone_mode():
 def test_registry_flags_override_a_registry_uri_from_the_environment():
     cfg = config(["--registry-port", "5000"], THRIFT_REGISTRY_URI="thrift://10.0.0.5:6000")
     assert cfg.registry_uri == "thrift://127.0.0.1:5000"
+
+
+def test_auto_discovery_selects_standalone_mode(tmp_path):
+    cfg = config(["--auto-discovery", "--auto-discovery-dir", str(tmp_path)])
+    assert (cfg.mode, cfg.registry_uri, cfg.auto_discovery_enabled, cfg.auto_discovery_dir) == (
+        "standalone", None, True, tmp_path,
+    )
+
+
+def test_workspace_narrows_auto_discovery():
+    cfg = config(["--workspace", "/w/app.eww"])
+    assert (cfg.mode, cfg.registry_uri, cfg.auto_discovery_workspace) == ("standalone", None, "/w/app.eww")
+
+
+def test_a_registry_uri_selects_standalone_mode():
+    cfg = config(["--registry-uri", "thrift://10.0.0.5:5000"])
+    assert (cfg.mode, cfg.registry_uri) == ("standalone", "thrift://10.0.0.5:5000")
+
+
+def test_a_registry_host_needs_a_port():
+    with pytest.raises(ValueError, match="--registry-port"):
+        config(["--registry-host", "10.0.0.5"])
