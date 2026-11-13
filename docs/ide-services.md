@@ -18,6 +18,10 @@ works, is in its guide:
   backend that hosts them already, such as a Thrift-enabled `iaride` or a
   hand-started `IarServiceLauncher -standalone -sockets`.
 
+These flags (and `--auto-discovery`/`--workspace` discovery) are `iar_cspy.cli`'s,
+shared by every `iar-cspy`-based tool; see the main [README](../README.md#command-line)
+and cspy-py's `connecting.md`/`guide.md` for the full, current connection reference.
+
 `run_headless.sh` wraps managed mode for stdio, which is what an MCP host
 wants:
 
@@ -40,6 +44,19 @@ missing service. The error messages and their fixes are listed under
 `ide_services_ensure(force=true)` re-checks the registry after a backend
 restart, and `ide_services_stop_launcher()` tears down a launcher this server
 started (which also takes the managed CSpyServer2's registry away).
+
+## ProjectManager busy
+
+`project_load_workspace`, `project_build` and `project_configure_and_start_debug`
+call mutating ProjectManager RPCs (`LoadEwwFile`/`LoadEwpFile`,
+`BuildProject`). ProjectManager can refuse one of these outright because the
+IDE is occupied - a modal dialog is open, or a build/analysis is already in
+progress - rather than because anything is actually broken. That comes back
+as `ok=False` with a `PROJECTMANAGER_BUSY` error (`retryable: true`; see
+`debugger_error_taxonomy()`), not an exception: back off and call the tool
+again. `projectmanager_call`, the unwrapped-method fallback, does not catch
+this - a busy refusal there comes through as the tool call failing with the
+same message.
 
 ## Using the OptionsService tools
 

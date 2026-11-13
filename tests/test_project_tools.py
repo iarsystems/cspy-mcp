@@ -7,6 +7,7 @@ import json
 import pytest
 
 from iar_cspy import CSpyError
+from iar_cspy.testing import project_manager_error
 
 
 def ok(**fields):
@@ -30,6 +31,18 @@ def test_project_build_success_and_failure_envelopes(server, fake):
     assert out["error"]["code"] == "BUILD_FAILED"
     assert out["error"]["message"] == "Build of 'Debug' in '/tmp/p.ewp' failed; see data.output_tail."
     assert out["data"]["output_tail"] == ["error: boom"]
+
+
+def test_project_build_busy_is_a_retryable_envelope(server, fake):
+    _, rpc = fake
+    rpc.on("projectmanager", "BuildProject", project_manager_error(description="a build is already running"))
+
+    out = server.project_build("/tmp/p.ewp", "Debug")
+    assert out["ok"] is False
+    assert out["error"]["code"] == "PROJECTMANAGER_BUSY"
+    assert out["error"]["retryable"] is True
+    assert "a build is already running" in out["error"]["message"]
+    assert out["data"] == {"project": {"filename": "/tmp/p.ewp"}, "configuration": "Debug"}
 
 
 def test_project_defaults_to_current_project(server, fake):
@@ -115,6 +128,29 @@ def test_project_load_workspace_and_status(server, fake):
     assert data["projects"][0]["configurations"] == [{"name": "Debug"}, {"name": "Release"}]
     assert data["projects"][0]["current_configuration"] == {"name": "Debug"}
     assert rpc.args("projectmanager", "LoadEwwFile") == [("/w/space.eww", True)]
+
+
+def test_project_load_workspace_busy_is_a_retryable_envelope(server, fake):
+    _, rpc = fake
+    rpc.on("projectmanager", "LoadEwwFile", project_manager_error(description="a modal dialog is open"))
+
+    out = server.project_load_workspace("/w/space.eww")
+    assert out["ok"] is False
+    assert out["error"]["code"] == "PROJECTMANAGER_BUSY"
+    assert out["error"]["retryable"] is True
+    assert out["data"] == {"file_path": "/w/space.eww"}
+
+
+def test_project_configure_and_start_debug_busy_is_a_retryable_envelope(server, fake):
+    _, rpc = fake
+    rpc.on("projectmanager", "BuildProject", project_manager_error(description="an analysis is in progress"))
+
+    out = server.project_configure_and_start_debug("/w/p.ewp", "Debug")
+    assert out["ok"] is False
+    assert out["error"]["code"] == "PROJECTMANAGER_BUSY"
+    assert out["error"]["retryable"] is True
+    assert out["data"] == {"project": {"filename": "/w/p.ewp"}, "configuration": "Debug"}
+    assert "launch_configuration" not in out["data"]
 
 
 def test_project_get_files_maps_collection_enum(server, fake):

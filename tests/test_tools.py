@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from iar_cspy import Config, CSpyError, SessionError
+from iar_cspy import Client, Config, CSpyError, NotConnectedError, SessionError
 from iar_cspy.testing import cspy_exception, fake_client
 
 LAUNCH_JSON = '{"request":"launch"}'
@@ -71,11 +71,41 @@ def test_session_gate(server, fake):
 
 def test_thrift_connection_info(server, fake):
     info = server.thrift_connection_info()
-    assert info["registry_port"] == 4711
-    assert info["cspy_mode"] == "standalone"
-    assert info["ide_services"] == ["options", "projectmanager"]
-    assert "managed_server" not in info
+    assert info["config"]["registry_uri"] == fake[0].config.registry_uri
+    assert info["backend"]["connected_registry_uri"] == "thrift://127.0.0.1:4711"
+    assert info["backend"]["registry_configured"] is True
+    assert info["config"]["mode"] == "standalone"
+    assert info["config"]["ide_services"] == []
     json.dumps(info)
+
+
+def test_thrift_connection_info_separates_discovered_endpoint(server, monkeypatch):
+    client, _ = fake_client(Config(mode="standalone", auto_discovery_enabled=True))
+    client.debugger.set_state(configured=True, started=True)
+    monkeypatch.setattr(client.backend, "current_registry_endpoint", lambda: ("10.0.0.8", 51926))
+    server.set_client(client)
+    try:
+        info = server.thrift_connection_info()
+        assert info["config"]["registry_uri"] is None
+        assert info["backend"]["connected_registry_uri"] == "thrift://10.0.0.8:51926"
+    finally:
+        server.set_client(None)
+        client.close()
+
+
+def test_not_connected_is_a_clear_error(server, tmp_path):
+    """Remote-control discovery finding nothing yet is reported plainly, not a crash."""
+    config = Config(
+        mode="standalone", auto_discovery_enabled=True, auto_discovery_dir=tmp_path, host_ide_services=False
+    )
+    client = Client(config, owns_backend=True)
+    server.set_client(client)
+    try:
+        with pytest.raises(NotConnectedError, match="debugger"):
+            server.debugger_is_online()
+    finally:
+        server.set_client(None)
+        client.close()
 
 
 def test_debugger_wrappers(server, fake):

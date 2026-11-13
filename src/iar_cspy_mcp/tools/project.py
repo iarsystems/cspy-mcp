@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from iar_cspy import CSpyError, ProjectStatus, to_plain
+from iar_cspy import BusyError, CSpyError, ProjectStatus, to_plain
 from iar_cspy.errors import error_entry, with_context
 from iar_cspy.ide_services import normalize_service_keys
 from iar_cspy.types import BuildResult
@@ -21,6 +21,16 @@ def _no_project_hint(exc: CSpyError) -> CSpyError:
     if "No current project" in str(exc):
         return with_context(exc, f"{exc} Use project_load_workspace(file_path).")
     return exc
+
+
+def _busy(exc: BusyError) -> dict[str, Any]:
+    """The structured, retryable error for a ProjectManager ``Busy`` refusal.
+
+    ProjectManager raises this for a mutating call (load, build, ...) when the
+    IDE is occupied (a modal dialog, build, or analysis in progress) - not a
+    backend fault, just try again.
+    """
+    return get_client().classify_error(exc)
 
 
 def _status_data(status: ProjectStatus) -> dict[str, Any]:
@@ -75,13 +85,15 @@ def project_load_workspace(file_path: str, fetch_dependency_data: bool = True) -
         fetch_dependency_data: Also fetch build dependency data (default True).
 
     Returns:
-        Overview of loaded projects and their build configurations.
+        Overview of loaded projects and their build configurations. `ok` is
+        false, with a retryable PROJECTMANAGER_BUSY error, when ProjectManager
+        is occupied (a modal dialog, build, or analysis in progress).
     """
-    return envelope(
-        ok=True,
-        tool="project_status",
-        data=_status_data(get_client().project.load(file_path, bool(fetch_dependency_data))),
-    )
+    try:
+        status = get_client().project.load(file_path, bool(fetch_dependency_data))
+    except BusyError as exc:
+        return envelope(ok=False, tool="project_status", data={"file_path": file_path}, error=_busy(exc))
+    return envelope(ok=True, tool="project_status", data=_status_data(status))
 
 
 @mcp.tool()
@@ -131,7 +143,10 @@ def project_build(
     """Build a project configuration synchronously via ProjectManager.BuildProject.
 
     A failed build is reported as ok=False with the tool output tail in data;
-    it does not raise, so build errors stay readable.
+    it does not raise, so build errors stay readable. ProjectManager refusing
+    the call outright because it is busy (a modal dialog, build, or analysis
+    already in progress) is also reported as ok=False, with a retryable
+    PROJECTMANAGER_BUSY error instead of a build output tail.
 
     Args:
         project_path: .ewp path; empty means the current project.
@@ -140,7 +155,11 @@ def project_build(
         max_output_lines: Maximum trailing build-output lines to return.
     """
     ctx, cfg_name = resolve_project(project_path, config_name)
-    result = get_client().project.build(ctx["filename"], cfg_name, jobs=int(num_parallel_builds))
+    try:
+        result = get_client().project.build(ctx["filename"], cfg_name, jobs=int(num_parallel_builds))
+    except BusyError as exc:
+        data = {"project": ctx, "configuration": cfg_name}
+        return envelope(ok=False, tool="project_build", data=data, error=_busy(exc))
     data = _build_data(result, max_output_lines)
     if result.succeeded:
         return envelope(ok=True, tool="project_build", data=data)
@@ -191,6 +210,10 @@ def project_configure_and_start_debug(
     Not available on older products (IDE platform before 9.5): see
     project_get_launch_config.
 
+    ProjectManager refusing a step outright because it is busy (a modal
+    dialog, build, or analysis already in progress) is reported as ok=False
+    with a retryable PROJECTMANAGER_BUSY error.
+
     Args:
         project_path: .ewp path; empty means the current project.
         config_name: Configuration name; empty means the current one.
@@ -200,13 +223,17 @@ def project_configure_and_start_debug(
         max_output_lines: Maximum trailing build-output lines to return.
     """
     ctx, cfg_name = resolve_project(project_path, config_name)
-    result = get_client().project.start_debugging(
-        ctx["filename"],
-        cfg_name,
-        build=bool(build_first),
-        start=bool(start_session),
-        jobs=int(num_parallel_builds),
-    )
+    try:
+        result = get_client().project.start_debugging(
+            ctx["filename"],
+            cfg_name,
+            build=bool(build_first),
+            start=bool(start_session),
+            jobs=int(num_parallel_builds),
+        )
+    except BusyError as exc:
+        data = {"project": ctx, "configuration": cfg_name}
+        return envelope(ok=False, tool="project_configure_and_start_debug", data=data, error=_busy(exc))
     data: dict[str, Any] = {"project": result.project, "configuration": result.configuration}
     if result.build is not None:
         data["build"] = _build_data(result.build, max_output_lines)

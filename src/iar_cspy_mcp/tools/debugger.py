@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from iar_cspy import StopResult, to_plain
+from iar_cspy import StopResult, format_registry_uri, to_plain
 from iar_cspy.debugger import PRE_SESSION_METHODS
 from iar_cspy.errors import DC_RESULTS, ERROR_CODES, FOCUSED_DC_RESULTS, error_entry
 from iar_cspy.events import LOG_CATEGORY_PREFIXES
-from iar_cspy.ide_services import IDE_SERVICES
 
 from .._app import envelope, get_client, mcp, require_session
 from ._args import call_with_json_args, context_from_json
@@ -16,39 +15,21 @@ from ._args import call_with_json_args, context_from_json
 
 @mcp.tool()
 def thrift_connection_info() -> dict[str, Any]:
-    """Return active server connection settings.
+    """Return configured settings and current backend connection information.
 
     Returns:
-        Dictionary with host/port defaults, timeout, thrift file path, and include dirs.
+        A configuration snapshot and backend status. The configured registry URI is
+        under ``config``; the current registry endpoint is under ``backend``.
 
     Notes:
-        This reports local server configuration only and does not verify that backend
-        services are reachable.
+        Does not start managed processes or verify that an explicitly configured
+        registry is reachable.
     """
     client = get_client()
-    cfg = client.config
+    info = client.info()
     endpoint = client.backend.current_registry_endpoint()
-    info = {
-        "host": cfg.host,
-        "port": cfg.port,
-        "timeout_ms": cfg.timeout_ms,
-        "thrift_file": str(cfg.thrift_file),
-        "include_dirs": list(cfg.include_dirs),
-        "registry_host": endpoint[0] if endpoint else cfg.registry_host,
-        "registry_port": endpoint[1] if endpoint else cfg.registry_port,
-        "registry_service_name": cfg.registry_service_name,
-        "cspy_mode": cfg.mode,
-        "cspy_executable": str(cfg.cspy_executable) if cfg.cspy_executable else None,
-        "cspy_args": list(cfg.cspy_args),
-        "cspy_start_timeout_ms": cfg.cspy_start_timeout_ms,
-        "cspy_restart_on_failure": cfg.cspy_restart_on_failure,
-        "iar_path": str(cfg.iar_path) if cfg.iar_path else None,
-        "service_launcher_exe": str(cfg.launcher_executable) if cfg.launcher_executable else None,
-        "service_bin_dir": str(cfg.service_bin_dir) if cfg.service_bin_dir else None,
-        "ide_services": list(cfg.ide_services) or sorted(IDE_SERVICES),
-        "auto_ide_services": cfg.auto_ide_services,
-    }
-    info.update(client.backend.process_status())
+    info["backend"]["registry_configured"] = client.backend.registry_configured
+    info["backend"]["connected_registry_uri"] = format_registry_uri(*endpoint) if endpoint else None
     return info
 
 

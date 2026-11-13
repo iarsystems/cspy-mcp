@@ -31,7 +31,6 @@ fi
 
 WEB_PORT="${MCP_PORT:-8000}"
 IAR_INSTALL_PATH="${1:-${IAR_INSTALL_PATH:-}}"
-REGISTRY_FILE="$SCRIPT_DIR/CSpyServer2-ServiceRegistry.txt"
 
 if [ -z "$IAR_INSTALL_PATH" ] && [ -z "${IARIDE_EXE:-}" ]; then
   echo "Path to an IAR installation is required." >&2
@@ -46,53 +45,22 @@ if [ ! -x "$IARIDE" ]; then
 fi
 
 # Unlike run_web.sh (which lets iar_cspy_mcp spawn and manage CSpyServer2
-# itself), IarIde is a long-lived GUI app, so we start it here and discover its
-# service registry the same way any external tool would: IarIde writes its
-# registry location to CSpyServer2-ServiceRegistry.txt in its current working
-# directory, which is SCRIPT_DIR since we cd there above.
-rm -f "$REGISTRY_FILE"
+# itself), IarIde is a long-lived GUI app, so we start it here and let
+# iar_cspy_mcp --auto-discovery find its registry through the *.remote
+# discovery file IarIde writes (default ~/.iar/auto_discovery): no waiting or
+# parsing here, iar_cspy retries discovery on every call until it appears. If
+# another IDE session is also running, narrow the search with --workspace
+# <file.eww> or --auto-discovery-dir.
 "$IARIDE" &
 IARIDE_PID=$!
 trap 'kill "$IARIDE_PID" 2>/dev/null || true' EXIT
 
-echo "Starting IarIde (pid $IARIDE_PID), waiting for $REGISTRY_FILE ..." >&2
-found=0
-for _ in $(seq 1 600); do
-  if [ -s "$REGISTRY_FILE" ]; then
-    found=1
-    break
-  fi
-  if ! kill -0 "$IARIDE_PID" 2>/dev/null; then
-    echo "IarIde exited before starting its service registry" >&2
-    exit 1
-  fi
-  sleep 0.1
-done
-if [ "$found" -ne 1 ]; then
-  echo "Timed out waiting for $REGISTRY_FILE" >&2
-  exit 1
-fi
-
-# The file holds a Thrift-JSON-serialized ServiceRegistry.thrift ServiceLocation
-# struct, keyed by field id: {"1":{"str":"127.0.0.1"},"2":{"i32":43347},...}
-# where 1=host, 2=port, 3=Protocol, 4=Transport.
-read -r REGISTRY_HOST REGISTRY_PORT < <("$PYTHON" -c '
-import json, sys
-with open(sys.argv[1]) as f:
-    location = json.load(f)
-print(location["1"]["str"], location["2"]["i32"])
-' "$REGISTRY_FILE")
-echo "Found IarIde service registry at $REGISTRY_HOST:$REGISTRY_PORT" >&2
+echo "Starting IarIde (pid $IARIDE_PID)" >&2
 echo "MCP endpoint: http://127.0.0.1:$WEB_PORT/mcp" >&2
-
-# Standalone mode: resolve services via the registry above instead of spawning
-# and managing our own backend.
-export THRIFT_CSPYSERVER_MODE=standalone
-export THRIFT_REGISTRY_HOST="$REGISTRY_HOST"
-export THRIFT_REGISTRY_PORT="$REGISTRY_PORT"
 
 # Not exec'd (unlike run_web.sh): we need to stay alive after the server exits
 # so the EXIT trap above can shut IarIde down too.
 "$PYTHON" -m iar_cspy_mcp \
   --web \
-  --web-port "$WEB_PORT"
+  --web-port "$WEB_PORT" \
+  --auto-discovery

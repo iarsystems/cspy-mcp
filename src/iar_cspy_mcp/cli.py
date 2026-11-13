@@ -9,7 +9,8 @@ import signal
 import sys
 import time
 
-from iar_cspy import Client, Config
+from iar_cspy import Client
+from iar_cspy.cli import add_connection_arguments, config_from_args
 
 from .server import mcp, set_client
 
@@ -31,115 +32,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Port to use with --web (default from MCP_PORT or 8000).",
     )
     parser.add_argument(
-        "--iar-path",
-        dest="iar_path",
-        default=None,
-        help=(
-            "Path to an IAR installation or build stage, i.e. the directory with "
-            "common/bin under it. The programs the server needs are taken from "
-            "there, so this is normally the only path you have to give."
-        ),
-    )
-    parser.add_argument(
-        "--cspyserver2",
-        dest="cspyserver2",
-        default=None,
-        help="Path to the CSpyServer2 executable, overriding --iar-path.",
-    )
-    parser.add_argument(
-        "--cspyserver2-args",
-        dest="cspyserver2_args",
-        default=None,
-        help="Optional CSpyServer2 args string (default: -standalone -sockets)",
-    )
-    parser.add_argument(
-        "--service-launcher",
-        dest="service_launcher",
-        default=None,
-        help=(
-            "Path to the IarServiceLauncher executable, overriding --iar-path. "
-            "It hosts the IDE services (ProjectManager, OptionsService) and owns "
-            "the service registry that CSpyServer2 then joins."
-        ),
-    )
-    parser.add_argument(
-        "--no-ide-services",
-        dest="no_ide_services",
-        action="store_true",
-        help=(
-            "Do not host the IDE services: run the debugger alone, without an "
-            "IarServiceLauncher. The project_* and options_* tools are then "
-            "unavailable."
-        ),
-    )
-    parser.add_argument(
-        "--ide-services",
-        dest="ide_services",
-        default=None,
-        help="Comma-separated IDE services to host: projectmanager, options (default: all).",
-    )
-    parser.add_argument(
         "--probe-cspyserver2",
         action="store_true",
         help="Start the managed backend, print its registry info, then exit.",
     )
-    parser.add_argument(
-        "--registry-host",
-        dest="registry_host",
-        default=None,
-        help="Connect to an existing backend registry host (standalone mode).",
-    )
-    parser.add_argument(
-        "--registry-port",
-        dest="registry_port",
-        type=int,
-        default=None,
-        help="Connect to an existing backend registry port (standalone mode).",
-    )
-    parser.add_argument(
-        "--registry-service",
-        dest="registry_service",
-        default=None,
-        help="Service name to resolve from registry (default: debugger).",
-    )
+    add_connection_arguments(parser)
     return parser.parse_args(argv)
-
-
-def config_from_args(args: argparse.Namespace, environ: dict[str, str] | None = None) -> Config:
-    """The backend Config for the command line on top of the environment."""
-    env = dict(os.environ if environ is None else environ)
-
-    if args.iar_path:
-        env["IAR_INSTALL_PATH"] = args.iar_path
-    if args.service_launcher:
-        env["THRIFT_SERVICE_LAUNCHER_EXE"] = args.service_launcher
-    if args.no_ide_services:
-        env["THRIFT_HOST_IDE_SERVICES"] = "0"
-    if args.ide_services is not None:
-        env["THRIFT_IDE_SERVICES"] = args.ide_services
-
-    if args.iar_path or args.cspyserver2 or args.service_launcher:
-        env["THRIFT_CSPYSERVER_MODE"] = "managed"
-        # Stale standalone-mode registry settings must not pin managed startup
-        # to an old port. A fixed registry is still possible with
-        # --cspyserver2-args "... -registry <port>".
-        env.pop("THRIFT_REGISTRY_PORT", None)
-        env.pop("THRIFT_REGISTRY_HOST", None)
-    if args.cspyserver2:
-        env["THRIFT_CSPYSERVER_EXE"] = args.cspyserver2
-    if args.cspyserver2_args:
-        env["THRIFT_CSPYSERVER_ARGS"] = args.cspyserver2_args
-
-    if args.registry_host is not None:
-        env["THRIFT_CSPYSERVER_MODE"] = "standalone"
-        env["THRIFT_REGISTRY_HOST"] = str(args.registry_host)
-    if args.registry_port is not None:
-        env["THRIFT_CSPYSERVER_MODE"] = "standalone"
-        env["THRIFT_REGISTRY_PORT"] = str(int(args.registry_port))
-    if args.registry_service is not None:
-        env["THRIFT_REGISTRY_SERVICE"] = str(args.registry_service)
-
-    return Config.from_env(env)
 
 
 class _TraceFormatter(logging.Formatter):
