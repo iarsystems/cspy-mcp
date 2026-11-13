@@ -191,6 +191,7 @@ runs the unit and live tests.
 | Breakpoints | `breakpoints_set_on_source`, `breakpoints_set_code`, `breakpoints_set_data`, `breakpoints_set_log`, `breakpoints_get_modes`, `breakpoints_set_on_ule`, `breakpoints_set_on_ule_with_category`, `breakpoints_set_from_descriptor`, `breakpoints_get_all`, `breakpoints_get`, `breakpoints_enable`, `breakpoints_remove`, `breakpoints_recently_hit` |
 | Stack and symbols | `contextmanager_get_stack`, `contextmanager_get_stack_depth`, `contextmanager_get_context_info`, `contextmanager_get_locals`, `contextmanager_get_parameters`, `symbols_list_visible`, `symbols_lookup` |
 | Memory and code | `memory_read`, `memory_write_hex`, `disassembly_disassemble_range`, `sourcelookup_get_source_ranges` |
+| Backend prompts | `frontend_get_prompts`, `frontend_set_answer`, `frontend_clear_answers` |
 | Terminal I/O | `libsupport_get_output`, `libsupport_clear_output`, `libsupport_push_input`, `libsupport_wait_for_input_request`, `libsupport_request_input`, `libsupport_request_input_binary` |
 | List windows | `listwindow_list_services`, `listwindow_get_overview`, `listwindow_get_rows`, `listwindow_sliding_navigate`, `listwindow_get_notifications`, `listwindow_trace_status`, `listwindow_trace_set_enabled`, `listwindow_trace_clear` |
 | Projects | `project_load_workspace`, `project_status`, `project_get_files`, `project_build`, `project_get_launch_config`, `project_configure_and_start_debug` |
@@ -219,6 +220,18 @@ output.
 
 Most debugger tools need a started session and refuse with an explicit
 message otherwise.
+
+### Prompts from the backend
+
+The backend asks its frontend (normally the IDE) for message boxes, file
+dialogs and source paths. Without an IDE, the server answers them itself,
+declining by default: Cancel/No (Ok when that is the only button), dialogs
+cancelled, source paths as the backend suggests (else unchanged).
+`frontend_get_prompts`
+shows what was asked and answered. A failing tool lists the prompts raised
+during that call in its error; to answer differently, set an answer with
+`frontend_set_answer(pattern, answer, kind)` and retry. When a
+Thrift-enabled IDE is the frontend, its user answers instead.
 
 ## Playbooks
 
@@ -283,7 +296,8 @@ tool calls. Its objects mirror these tools.
 
 `iar-cspy` resolves every service through the registry, supervises the
 managed processes, and hosts the callback services the backend expects from
-a frontend (debug events, terminal I/O, list window notifications).
+a frontend (debug events, terminal I/O, list window notifications, and the
+IDE's dialogs, answered headless).
 
 ## Repository layout
 

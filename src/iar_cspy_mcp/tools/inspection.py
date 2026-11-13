@@ -16,9 +16,8 @@ def contextmanager_get_stack(context_json: str = "", low: int = 0, high: int = 2
 
     context_json example: {"type":"CurrentBase"}
 
-    Headless backends (no IDE) fail this with "No such service,
-    serviceName=frontend": the backend calls back into the IDE's frontend
-    service. Registers, eval and memory reads work regardless.
+    The backend may ask the frontend for source paths meanwhile; see
+    frontend_get_prompts.
     """
     require_session("contextmanager_get_stack")
     return to_plain(get_client().context.stack(int(low), int(high), context=context_from_json(context_json)))
@@ -35,9 +34,8 @@ def contextmanager_get_stack_depth(context_json: str = "", max_depth: int = 256)
 def contextmanager_get_context_info(context_json: str = "") -> Any:
     """Get context info (function, location, source) for a context reference.
 
-    Headless backends (no IDE) fail this with "No such service,
-    serviceName=frontend": the backend calls back into the IDE's frontend
-    service. Registers, eval and memory reads work regardless.
+    The backend may ask the frontend for source paths meanwhile; see
+    frontend_get_prompts.
     """
     require_session("contextmanager_get_context_info")
     return to_plain(get_client().context.info(context=context_from_json(context_json)))
