@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from iar_cspy import Client, Config, CSpyError, NotConnectedError, SessionError
+from iar_cspy import Client, Config, CSpyError, NotConnectedError, SessionError, UnsupportedMethod
 from iar_cspy.testing import cspy_exception, fake_client
 
 LAUNCH_JSON = '{"request":"launch"}'
@@ -523,25 +523,77 @@ def test_listwindow_tools(server, fake, monkeypatch):
 
     monkeypatch.setattr(client.listwindows, "call", call)
     name = "WIN_SLIDING_TRACE_WINDOW"
-    assert server.listwindow_list_services("trace")[0]["name"] == name
-    overview = server.listwindow_get_overview(name)
+    services = server.listwindow_list_services("trace")
+    assert services["ok"] is True and services["data"]["read_only"] is False
+    assert services["data"]["services"][0]["name"] == name
+    overview = server.listwindow_get_overview(name)["data"]
     assert (overview["is_sliding"], overview["row_count"], overview["display_name"]) == (True, 2, "Trace")
-    rows = server.listwindow_get_rows(name, 0, 10)
+    rows = server.listwindow_get_rows(name, 0, 10)["data"]
     assert rows["returned"] == 2
     assert rows["rows"][0]["row"]["cells"][0]["text"] == "row0"
-    assert server.listwindow_sliding_navigate(name)["row_count"] == 2
-    assert server.listwindow_trace_status(name)["is_enabled"] is True
-    assert server.listwindow_trace_set_enabled(name, True) == {"ok": True, "service_name": name, "enabled": True}
-    assert server.listwindow_trace_clear(name) == {"ok": True, "service_name": name}
+    assert server.listwindow_sliding_navigate(name)["data"]["row_count"] == 2
+    assert server.listwindow_trace_status(name)["data"]["is_enabled"] is True
+    set_enabled = server.listwindow_trace_set_enabled(name, True)
+    assert set_enabled["ok"] is True and set_enabled["data"] == {"service_name": name, "enabled": True}
+    clear = server.listwindow_trace_clear(name)
+    assert clear["ok"] is True and clear["data"] == {"service_name": name}
 
 
 def test_listwindow_notifications(server, fake):
     client, _ = fake
     client.listwindows.server.handler.notify({"kind": "n"})
     client.listwindows.server.handler.notifyToolbar({"kind": "t"})
-    out = server.listwindow_get_notifications(clear=True)
+    out = server.listwindow_get_notifications(clear=True)["data"]
     assert (out["note_count"], out["toolbar_note_count"]) == (1, 1)
-    assert server.listwindow_get_notifications()["note_count"] == 0
+    assert server.listwindow_get_notifications()["data"]["note_count"] == 0
+
+
+def test_listwindow_tools_read_only(server, fake, monkeypatch):
+    """Under a read-only (IDE-hosted snapshot) host: reads work, trace/navigate don't."""
+    client, _ = fake
+    client.registry.set(["Trace"])
+    monkeypatch.setattr(client.listwindows, "read_only", lambda: True)
+
+    unsupported = {"navigateToFraction", "isEnabled", "setEnabled", "clear"}
+
+    def call(service_name, method, *args, trace=False):
+        if method in unsupported:
+            raise UnsupportedMethod(
+                f"'{method}' is not supported for window {service_name!r}: read-only host.", method
+            )
+        return {
+            "getDisplayName": "Trace",
+            "getColumnInfo": [{"title": "PC"}],
+            "getListSpec": {"canSort": True},
+            "isSliding": False,
+            "getNumberOfRows": 1,
+            "getRow": {"cells": [{"text": f"row{args[0] if args else ''}"}]},
+        }.get(method)
+
+    monkeypatch.setattr(client.listwindows, "call", call)
+    name = "Trace"
+
+    services = server.listwindow_list_services("")
+    assert services["ok"] is True
+    assert services["data"]["read_only"] is True
+
+    overview = server.listwindow_get_overview(name)
+    assert overview["ok"] is True
+    assert overview["data"]["is_sliding"] is False
+
+    rows = server.listwindow_get_rows(name, 0, 10)
+    assert rows["ok"] is True
+    assert rows["data"]["returned"] == 1
+
+    for call_result in (
+        server.listwindow_sliding_navigate(name),
+        server.listwindow_trace_status(name),
+        server.listwindow_trace_set_enabled(name, True),
+        server.listwindow_trace_clear(name),
+    ):
+        assert call_result["ok"] is False
+        assert call_result["error"]["code"] == "UNSUPPORTED_METHOD"
+        assert call_result["error"]["retryable"] is False
 
 
 def test_managed_mode_status_includes_process_state(server, monkeypatch):
