@@ -101,11 +101,50 @@ def test_not_connected_is_a_clear_error(server, tmp_path):
     client = Client(config, owns_backend=True)
     server.set_client(client)
     try:
-        with pytest.raises(NotConnectedError, match="debugger"):
+        with pytest.raises(NotConnectedError, match="debugger") as exc_info:
             server.debugger_is_online()
+        # the wrapper's hint, not just the raw "no registry available" text
+        assert "never been one found" in str(exc_info.value)
     finally:
         server.set_client(None)
         client.close()
+
+
+def test_a_dead_discovered_backend_says_give_up_not_search(server):
+    """A registry that was reachable and now refuses: distinct from never-found."""
+    import socket
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(("127.0.0.1", 0))
+    dead_port = probe.getsockname()[1]
+    probe.close()  # nothing listens here now, unlike a transient refusal
+
+    client = Client(Config(mode="standalone", registry_uri=f"thrift://127.0.0.1:{dead_port}"), owns_backend=True)
+    server.set_client(client)
+    try:
+        with pytest.raises(CSpyError) as exc_info:
+            server.debugger_is_online()
+        message = str(exc_info.value)
+        assert "do not" in message.lower()
+        assert "PID" in message
+        assert "ask the user" in message.lower()
+        assert f"127.0.0.1:{dead_port}" in message  # a fixed registry: told to ask the user, with the address
+    finally:
+        server.set_client(None)
+        client.close()
+
+
+def test_busy_passes_through_the_wrapper_unchanged(server, fake):
+    """projectmanager_call doesn't catch Busy itself: the wrapper must not touch it either."""
+    from iar_cspy.errors import BusyError
+    from iar_cspy.testing import project_manager_error
+
+    _, rpc = fake
+    rpc.on("projectmanager", "BuildProject", project_manager_error(description="a build is already running"))
+    with pytest.raises(BusyError, match="a build is already running") as exc_info:
+        server.projectmanager_call("BuildProject", '[{"filename": "/tmp/p.ewp"}, "Debug", 4]')
+    # confirm it was not rewritten: no connection-trouble framing leaked in
+    assert "PID" not in str(exc_info.value)
 
 
 def test_debugger_wrappers(server, fake):
@@ -594,6 +633,25 @@ def test_listwindow_tools_read_only(server, fake, monkeypatch):
         assert call_result["ok"] is False
         assert call_result["error"]["code"] == "UNSUPPORTED_METHOD"
         assert call_result["error"]["retryable"] is False
+
+
+def test_debugger_session_status_hints_a_dead_connection(server, fake):
+    """backend_online_error keeps its raw text; a sibling hint says what it means."""
+    _, rpc = fake
+    rpc.on("debugger", "isOnline", Exception("Could not connect to ('127.0.0.1', 40557)"))
+    data = server.debugger_session_status()["data"]
+    assert "Could not connect" in data["backend_online_error"]
+    assert "backend_online_error_hint" in data
+    assert "do not" in data["backend_online_error_hint"].lower()
+
+
+def test_debugger_session_status_does_not_hint_an_unrelated_probe_failure(server, fake):
+    """A genuine backend fault (not a dead/never-found connection) gets no hint."""
+    _, rpc = fake
+    rpc.on("debugger", "isOnline", cspy_exception(code=3, method="isOnline", message="Session aborted!"))
+    data = server.debugger_session_status()["data"]
+    assert "backend_online_error" in data
+    assert "backend_online_error_hint" not in data
 
 
 def test_managed_mode_status_includes_process_state(server, monkeypatch):

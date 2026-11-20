@@ -288,3 +288,17 @@ def test_ide_services_status_and_stop(server, fake):
     assert data["services"]["projectmanager"]["registered"] is False
     stopped = server.ide_services_stop_launcher()
     assert stopped["ok"] is True and stopped["data"]["was_running"] is False
+
+
+def test_ide_services_status_hints_a_dead_registry(server, fake, monkeypatch):
+    """registry_error keeps its raw text; a sibling hint says this is not a glitch to retry blindly."""
+    client, _ = fake
+
+    def boom(name_filter=""):
+        raise CSpyError("A service registry (registry_uri, THRIFT_REGISTRY_URI) is required to query services")
+
+    monkeypatch.setattr(client.registry, "services", boom)
+    data = server.ide_services_status()["data"]
+    assert "required to query services" in data["registry_error"]
+    assert "registry_error_hint" in data
+    assert "never been one found" in data["registry_error_hint"]
