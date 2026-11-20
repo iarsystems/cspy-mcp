@@ -206,14 +206,25 @@ structs as objects and enums by name. Headless backends may not publish
 instruction trace list windows; `listwindow_list_services("")` shows what is
 registered before you read rows.
 
+List windows behave the same whether CSpyServer2 hosts one `ListWindowBackend`
+per window, or an IDE hosts all of them read-only through a single snapshot
+service. `listwindow_list_services`'s result carries `data.read_only`: when
+true, `listwindow_sliding_navigate` and the `listwindow_trace_*` tools return
+`ok: false` with `error.code == "UNSUPPORTED_METHOD"` instead of working.
+`service_name` on every listwindow tool must be a `name` from
+`listwindow_list_services`'s result, never constructed by hand - it is a
+ServiceRegistry name under a normal backend, a window's display name under a
+read-only host.
+
 ### Response envelope and errors
 
-The lifecycle, status, wait, project and options tools return
+The lifecycle, status, wait, project, options and list window tools return
 `{"ok": bool, "tool": name, "data": {...}, "error": null | {...}}`. Expected
-negative outcomes (a timeout, a failed build, rejected option values) are
-`ok: false` with a machine-readable `error.code` (`TIMEOUT`, `BUILD_FAILED`,
-`OPTION_VERIFICATION_FAILED`, ...) rather than a tool error.
-`debugger_error_taxonomy()` lists the codes. When a failure looks like a
+negative outcomes (a timeout, a failed build, rejected option values, an
+operation unsupported by the current host) are `ok: false` with a
+machine-readable `error.code` (`TIMEOUT`, `BUILD_FAILED`,
+`OPTION_VERIFICATION_FAILED`, `UNSUPPORTED_METHOD`, ...) rather than a tool
+error. `debugger_error_taxonomy()` lists the codes. When a failure looks like a
 backend crash, `details.backend_diagnostics` carries the backend's recent
 output.
 
