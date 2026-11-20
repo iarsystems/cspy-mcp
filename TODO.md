@@ -119,3 +119,12 @@ New items, roughly in priority order:
   dialogs). A stand-in hosted like the event handler would likely unblock them,
   but it has to answer the backend's prompts on the user's behalf, so decide
   on a policy first (e.g. default answer + log every prompt).
+
+23. [ ] Fix register reads (`client.debugger.registers()` / `debugger_register_snapshot`)
+- The CSPyMemory interface has historically been very picky about reading SFR and other non-regular memory spaces. This has struck e.g. reading multiple registers.  After the fixes in version 1.1 of the interface (MR !2411, IDE-8591-BB-remote-read-sfr-units) this has been fixed. One can now read a whole block of registers in one call.
+- Backwards compatibility: this is a silent improvement in the backend's Thrift
+  implementation (nothing in the IDL changed), so older backends may still
+  expect, or only work with, the byte-unit read. Select the read style by the
+  backend's API version rather than guessing from errors. `CSpyMemory` has
+  `GetServiceVersion()` (memory.thrift). Keep the old
+  byte-unit path for older versions.
