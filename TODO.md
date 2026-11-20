@@ -112,10 +112,9 @@ New items, roughly in priority order:
 - Done: the core-state tools list 0 = stopped, 1 = running, 2 = sleeping,
   3 = unknown, 4 = no power; the API has `iar_cspy.CoreState`.
 
-21. [ ] Host a headless `frontend` service
-- Without an IDE, `getStack`, `getContextInfo`, source lookup and disassembly
-  at the PC fail with "No such service, serviceName=frontend": the backend calls
-  back into the IDE's UI service (`frontend.thrift`: message boxes, file
-  dialogs). A stand-in hosted like the event handler would likely unblock them,
-  but it has to answer the backend's prompts on the user's behalf, so decide
-  on a policy first (e.g. default answer + log every prompt).
+21. [x] Host a headless `frontend` service
+- Done in iar-cspy (`client.frontend`); the server exposes it as
+  `frontend_get_prompts`, `frontend_set_answer` and `frontend_clear_answers`,
+  and failing tools list the call's prompts in their error. Open: report
+  prompts on successful results too (e.g. a `warnings` field in the
+  envelopes).

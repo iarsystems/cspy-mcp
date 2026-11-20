@@ -58,8 +58,12 @@ See `.env.example` for the rest.
 
 Important behavior:
 - The registry endpoint is not the debugger endpoint itself.
-- The event handler and libsupport services are hosted by this process and
-  registered on configure/start.
+- The event handler, libsupport and frontend services are hosted by this
+  process and registered on configure/start (the event handler and frontend
+  only when no other reachable one, e.g. an IDE's, is registered). The
+  frontend answers the backend's prompts headless, declining by default;
+  the `frontend_*` tools show and override them, and a failing call's
+  prompts are in its error.
 - One session per CSpyServer2 process: managed mode restarts it on stop. A
   replaced CSpyServer2 (`Backend.debugger_generation`) ends the session:
   `Client.call` raises `SessionError` for calls that needed it.
@@ -92,8 +96,6 @@ See `docs/backend-notes.md` in cspy-py. In short:
 - Multicore sessions need `--multicore_nr_of_cores=N` on the CSpyServer2 command
   line too (managed mode adds it).
 - Target stdin reads wait for `libsupport_push_input`, as at a console.
-- Headless: `ContextManager.getStack`/`getContextInfo` fail with "No such
-  service: frontend" (no IDE frontend).
 - Flash loading and license (`kDcLicenseViolation`) failures during start.
 Tool failures may be backend lifecycle failures rather than API misuse.
 
