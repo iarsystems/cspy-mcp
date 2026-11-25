@@ -47,7 +47,9 @@ def frontend_set_answer(pattern: str, answer: str, kind: str = "message_box") ->
 
     pattern is a regular expression, searched in the prompt's message and
     title (see frontend_get_prompts); the most recently set matching answer
-    wins. kind is one of message_box, file_dialog, save_dialog,
+    wins. Keep the pattern specific: a broad one (".*", "file") also answers
+    unrelated prompts, with side effects such as overwriting files or
+    confirming destructive actions. kind is one of message_box, file_dialog, save_dialog,
     directory_dialog, selection, alias, dialog, or "" for any kind.
     answer by kind:
     - message_box: "ok", "cancel", "yes" or "no"
