@@ -201,18 +201,11 @@ def _apply(method: str, ctx: dict[str, Any], cfg: str, options: list[dict[str, s
 
 @mcp.tool()
 def project_option_categories(project_path: str = "", config_name: str = "") -> dict[str, Any]:
-    """List the option categories of a build configuration (the options dialog's pages).
-
-    Use this to find where a setting lives before reading options: C-RUN is
-    `RuntimeChecking`, the compiler is `ICCARM`/`ICCRX`/..., the linker `ILINK`,
-    the debugger and its probes `C-SPY` plus one category per driver.
+    """List a configuration's option categories, with option counts.
 
     Args:
-        project_path: Absolute .ewp path. Empty means the current project.
-        config_name: Build configuration, e.g. 'Debug'. Empty means the current one.
-
-    Returns:
-        Envelope whose data lists each category id with how many options it holds.
+        project_path: Absolute .ewp path; empty = current project.
+        config_name: Build configuration; empty = current one.
     """
     try:
         ctx, cfg = resolve_project(project_path, config_name)
@@ -243,37 +236,21 @@ def project_get_options(
     max_results: int = 60,
     include_elements: bool = True,
 ) -> dict[str, Any]:
-    """Read project options, with their legal values, from ProjectManager.
+    """Read project options and their legal values. Filter: a configuration has ~2000.
 
-    This is the option reader to use: it needs no OptionsService, which a GUI
-    `iaride` does not publish. A configuration has ~2000 options, so filter.
-
-    `elements` is the legal-value list for `List`, `Radio`, `CheckList`,
-    `CheckTree` and `DeviceSelection` options: write back an element's `id`.
-    `Check` options have no elements - they are booleans, spelled either
-    'On'/'Off' or 'true'/'false' depending on the option.
+    `elements` lists the legal values; write back an element `id`. `Check`
+    options are booleans ('On'/'Off' or 'true'/'false', per option).
 
     Args:
-        project_path: Absolute .ewp path. Empty means the current project.
-        config_name: Build configuration, e.g. 'Debug'. Empty means the current one.
-        category: Only options in this category (see `project_option_categories`),
-            matched case-insensitively, exactly or as a substring.
-        ids: Comma-separated option ids to read instead, e.g.
-            'RuntimeChecking.@GenRtcEnable,ICCARM.@CCOptLevel'.
-        search: Keep options whose id, title or description contain every word
-            given, ignoring case, spacing and punctuation - so 'runtime
-            checking' matches the id prefix 'RuntimeChecking' (the C-RUN
-            options) and 'division by zero' matches the title 'Division by
-            zero'. Product names are not indexed: search for what the options
-            are called ('runtime checking'), not for 'C-RUN'. Use
-            `project_option_categories` when unsure what exists.
-        max_results: Cap on returned options (default 60); `total_matched` reports
-            how many there were.
-        include_elements: Include each option's legal values (default True).
-
-    Returns:
-        Envelope whose data holds the matching options with value, type, title,
-        enabled/visible flags and legal `elements`.
+        project_path: Absolute .ewp path; empty = current project.
+        config_name: Build configuration; empty = current one.
+        category: Category id (see `project_option_categories`), exact or substring.
+        ids: Comma-separated option ids, read instead of a category.
+        search: Words that must all match id, title or description, ignoring
+            case and punctuation ('runtime checking'). Product names like
+            'C-RUN' are not indexed.
+        max_results: Cap on returned options; `total_matched` has the full count.
+        include_elements: Include legal values.
     """
     try:
         ctx, cfg = resolve_project(project_path, config_name)
@@ -333,33 +310,21 @@ def project_set_options(
     config_name: str = "",
     verify_only: bool = False,
 ) -> dict[str, Any]:
-    """Set project options through ProjectManager, validating each value first.
+    """Set project options, validating each value first. Nothing is written unless all are valid.
 
-    Values are validated against the option's own `elements` before anything is
-    sent, because the backend accepts a bad boolean silently and resolves it to
-    "off". Nothing is written unless every value is valid.
-
-    Write an element's `id` for `List`/`Radio`/`DeviceSelection` options (not a
-    label and not an index), 'On'/'Off' or 'true'/'false' for `Check` options,
-    and one '0'/'1' per element in element order for a `CheckList`. Read the
-    option with `project_get_options` first to see what is legal.
-
-    Set coupled options in one call so validation sees them together.
+    Values: an element `id` for List/Radio/DeviceSelection, 'On'/'Off' or
+    'true'/'false' for Check, one '0'/'1' per element for CheckList. Read the
+    option with `project_get_options` first. Set coupled options in one call.
 
     Args:
-        options_json: JSON object of id -> value, e.g.
-            `{"RuntimeChecking.@GenRtcEnable": "On",
-              "RuntimeChecking.@GenRtcDivByZero": "On"}`,
-            or a JSON list of `{"id": ..., "value": ...}` objects.
-        project_path: Absolute .ewp path. Empty means the current project.
-        config_name: Build configuration, e.g. 'Debug'. Empty means the current one.
-        verify_only: Compute the result without changing the project (default False).
+        options_json: JSON object of id -> value, or a list of {"id", "value"}.
+        project_path: Absolute .ewp path; empty = current project.
+        config_name: Build configuration; empty = current one.
+        verify_only: Compute the result without changing the project.
 
     Returns:
-        Envelope whose data reports, per option, the value before, the value
-        requested and the value the backend actually set - which can differ,
-        since validation may coerce. The change is in the project manager's
-        in-memory model; it reaches the .ewp only when the project is saved.
+        Per option: value before, requested and actually set. The change is
+        in memory until the project is saved.
     """
     parsed = parse_json(options_json, "options_json")
     if isinstance(parsed, dict):
