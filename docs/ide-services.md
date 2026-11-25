@@ -45,6 +45,28 @@ missing service. The error messages and their fixes are listed under
 restart, and `ide_services_stop_launcher()` tears down a launcher this server
 started (which also takes the managed CSpyServer2's registry away).
 
+### When the backend is dead or was never found
+
+`iar_cspy` raises `BackendUnavailableError` when the service registry cannot
+be used, with a `kind` saying which case it is. Every tool call that fails
+this way gets a directive explanation of that case appended to the raw
+transport error, so the caller does not go hunting for a process, an old port
+or a coredump (this server has no visibility into why an IDE exited, and the
+explanation would not change the next step):
+
+- **`never_found`**: no backend has ever been found. Start one, or ask the
+  user to, then retry.
+- **`managed_exited`**: the backend this server manages has exited. The next
+  call restarts it automatically; retry, then configure the session again.
+- **`fixed_unreachable`**: a fixed registry (`--registry-uri`) is gone. Only
+  its owner can restart it; ask the user.
+- **`discovered_gone`**: an auto-discovered IDE closed. A new one is picked
+  up when it registers: wait and retry.
+
+`debugger_session_status()`'s `backend_online_error`/`core_state_error` and
+`ide_services_status()`'s `registry_error` keep their raw text, with
+`*_kind` and `*_hint` fields added next to them.
+
 ## ProjectManager busy
 
 `project_load_workspace`, `project_build` and `project_configure_and_start_debug`

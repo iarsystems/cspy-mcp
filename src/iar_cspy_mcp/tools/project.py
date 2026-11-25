@@ -14,6 +14,7 @@ from iar_cspy.ide_services import normalize_service_keys
 from iar_cspy.types import BuildResult
 
 from .._app import envelope, get_client, mcp
+from .._connection_trouble import add_connection_guidance
 from ._args import call_with_json_args
 
 
@@ -289,8 +290,13 @@ def ide_services_status() -> dict[str, Any]:
     Returns:
         Envelope whose data contains mode, the service registry endpoint,
         per-service presence, launcher process state and registered services.
+        A `registry_error_hint` next to `registry_error` means the backend is
+        dead or was never found, and says what to do instead of searching for
+        a PID, a port, or a coredump.
     """
-    return envelope(ok=True, tool="ide_services_status", data=get_client().ide_services.status())
+    client = get_client()
+    data = add_connection_guidance(client.ide_services.status(), registry_uri=client.config.registry_uri)
+    return envelope(ok=True, tool="ide_services_status", data=data)
 
 
 @mcp.tool()

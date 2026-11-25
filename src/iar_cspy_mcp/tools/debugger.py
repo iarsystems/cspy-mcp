@@ -10,6 +10,7 @@ from iar_cspy.errors import DC_RESULTS, ERROR_CODES, FOCUSED_DC_RESULTS, error_e
 from iar_cspy.events import LOG_CATEGORY_PREFIXES
 
 from .._app import envelope, get_client, mcp, require_session
+from .._connection_trouble import add_connection_guidance
 from ._args import call_with_json_args, context_from_json
 
 
@@ -88,8 +89,16 @@ def debugger_get_core_state(core: int = 0) -> int:
 
 @mcp.tool()
 def debugger_session_status() -> dict[str, Any]:
-    """Return local lifecycle flags and lightweight backend state hints."""
-    return envelope(ok=True, tool="debugger_session_status", data=get_client().debugger.status())
+    """Return local lifecycle flags and lightweight backend state hints.
+
+    `backend_online_error`/`core_state_error` are the raw text of a probe that
+    failed rather than raising. When the backend is dead or was never found, a
+    `*_kind` and a `*_hint` next to it say so and what to do: this is not
+    something to root-cause by hunting for a PID, an old port, or a coredump.
+    """
+    client = get_client()
+    data = add_connection_guidance(client.debugger.status(), registry_uri=client.config.registry_uri)
+    return envelope(ok=True, tool="debugger_session_status", data=data)
 
 
 @mcp.tool()
