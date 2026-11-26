@@ -127,16 +127,51 @@ configuration", same as the `project_*` tools. `options_call` is the generic
 fallback for the raw RPCs.
 
 **For plain option reading and writing, prefer ProjectManager.** It exposes a
-flat list of option ids and values with no session or XML involved:
+flat list of option ids and values with no session or XML involved, and three
+tools wrap it:
+
+```
+project_option_categories()                        → the options dialog's pages, with counts
+project_get_options(category=, ids=, search=)      → values, types, titles and legal `elements`
+project_set_options(options_json, verify_only=)    → validated writes, reporting actual vs requested
+```
+
+A configuration has ~2000 options, so `project_get_options` filters: by
+`category` (`RuntimeChecking` for C-RUN, `ICCARM` for the compiler, `ILINK` for
+the linker), by explicit `ids`, or by `search`, which matches every word given
+against id, title and description ignoring case, spacing and punctuation — so
+`search="runtime checking"` finds the C-RUN options whose ids read
+`RuntimeChecking.@GenRtc…`. Titles come from the presentation document and are
+simply absent on installations that do not ship it.
+
+`project_set_options` validates each value against that option's own `elements`
+*before* writing anything, and writes nothing if any value is invalid. This is
+not pedantry: the backend accepts an unrecognised boolean and silently resolves
+it to "off", so `"Yes"` would disable the check you meant to enable. It also
+retries a `Busy` refusal, reports `before`/`requested`/`actual` per option so
+backend coercion is visible, and says `persisted_to_disk: false` — an apply
+changes the in-memory model, and the `.ewp` is written only when the project is
+saved.
+
+The raw escape hatch remains for anything unwrapped:
 
 ```
 projectmanager_call("GetOptionsForConfiguration",   "[{\"filename\": \"/abs/p.ewp\"}, \"Debug\", []]")
 projectmanager_call("ApplyOptionsForConfiguration", "...")
 ```
 
+[**Using ProjectManager for project settings**](project-manager-for-settings.md)
+is the full reference for this: the option model, the id and value encodings,
+discovery, working-copy transactions, and worked examples for the changes users
+actually ask for (target device, runtime library, optimization level, debug
+probe, enabling C-RUN).
+
 Reach for `options_*` when you want what the GUI would show — grouping, page
 structure, presentation metadata — or the backend's validation of a proposed
-value.
+value. Note that against a **GUI `iaride` this is not an option at all**: its
+remote-control registry hosts ProjectManager but neither OptionsService nor the
+ServiceManager needed to start one, so `options_*` can only be used in managed
+mode or against a hand-started `IarServiceLauncher`.
 
 Two behaviours worth knowing, both inherited from the backend:
 

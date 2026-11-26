@@ -56,6 +56,7 @@ def test_tool_inventory(server):
         "debugger_register_snapshot", "debugger_call", "project_load_workspace", "project_status",
         "project_get_files", "project_build", "project_get_launch_config", "project_configure_and_start_debug",
         "projectmanager_call", "ide_services_status", "ide_services_ensure", "ide_services_stop_launcher",
+        "project_option_categories", "project_get_options", "project_set_options",
         "options_create_session", "options_destroy_session", "options_get_category_tree",
         "options_get_option_tree", "options_update_state", "options_commit", "options_call",
     }  # fmt: skip
