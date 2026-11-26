@@ -131,7 +131,8 @@ we recommend using the latest IAR product version for your architecture, if poss
   IDE writes (default `~/.iar/auto_discovery`) and keeps trying until one
   appears, so it can start before the backend does.
 
-See [docs/ide-services.md](docs/ide-services.md) for the IDE services, and
+See [docs/ide-services.md](docs/ide-services.md) for the IDE services,
+[docs/crun.md](docs/crun.md) for the C-RUN runtime-checking tools, and
 cspy-py's docs for the rest:
 [guide.md](https://github.com/iarsystems/cspy-py/blob/main/docs/guide.md) for
 the full connection reference,
@@ -305,7 +306,7 @@ tests/               tool tests (against iar_cspy.testing fakes) and live tests
 examples/
   firmware/          Cortex-M3 simulator program + launch.json used by the live tests
   mcp/               MCP client configs and a stdio protocol client
-docs/                IDE services
+docs/                IDE services, C-RUN tools
 scripts/             run_validation.ps1: unit and live tests on Windows
 mcp_thrift_server/   deprecated shim for the server's old module name (see below)
 run_headless.sh, run_web.sh, run_iaride.sh   start the server from a checkout (Linux/macOS)
