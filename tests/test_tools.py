@@ -45,6 +45,7 @@ def test_tool_inventory(server):
         "breakpoints_set_from_descriptor", "breakpoints_set_on_ule", "breakpoints_set_on_ule_with_category",
         "breakpoints_set_on_source", "breakpoints_set_code", "breakpoints_set_data", "breakpoints_set_log",
         "breakpoints_get_modes", "debugger_get_log",
+        "frontend_get_prompts", "frontend_set_answer", "frontend_clear_answers",
         "breakpoints_enable", "breakpoints_remove", "breakpoints_recently_hit", "contextmanager_get_stack",
         "contextmanager_get_stack_depth", "contextmanager_get_context_info", "contextmanager_get_locals",
         "contextmanager_get_parameters", "symbols_list_visible", "symbols_lookup", "memory_read",
@@ -467,6 +468,59 @@ def test_inspection_tools(server, fake):
     assert (written["written_bytes"], written["count"]) == (2, 2)
     assert server.disassembly_disassemble_range(1, 0, 1, 4, "")[0]["asm"] == "nop"
     assert server.sourcelookup_get_source_ranges(1, 0x20)[0]["file"] == "main.c"
+
+
+def test_frontend_tools(server, fake):
+    client, _ = fake
+    service = client.frontend.service
+    assert service.messageBox("Erase flash?", "Flash", 1, 2, "") == 3  # kMsgYesNo -> kMsgResNo
+    service.messageBoxAsync("Download done", "", 0, "")
+    out = server.frontend_get_prompts()
+    assert (out["hosting"], out["count"], out["progress"]) == (False, 2, [])
+    first = out["prompts"][0]
+    assert {k: first[k] for k in ("kind", "method", "title", "message", "answer", "answered_by")} == {
+        "kind": "message_box",
+        "method": "messageBox",
+        "title": "Flash",
+        "message": "Erase flash?",
+        "answer": "no",
+        "answered_by": "default",
+    }
+    assert first["details"]["buttons"] == ["yes", "no"]
+    assert out["prompts"][1]["kind"] == "message" and out["prompts"][1]["answer"] is None
+    json.dumps(out)  # JSON-safe for MCP clients
+
+    assert server.frontend_set_answer("Erase", "yes") == {
+        "ok": True, "pattern": "Erase", "kind": "message_box", "answer": "yes",
+    }  # fmt: skip
+    assert server.frontend_set_answer("Locate", '["/src/a.c"]', kind="file_dialog")["answer"] == ["/src/a.c"]
+    assert server.frontend_set_answer("core", "1", kind="")["kind"] is None
+    assert service.messageBox("Erase flash?", "", 0, 2, "") == 2  # kMsgResYes
+    assert service.openFileDialog("Locate a.c", "", "", False, True) == ["/src/a.c"]
+    assert service.openElementSelectionDialog("", "Pick a core", ["a", "b"]) == 1
+    with pytest.raises(ValueError, match="message box"):
+        server.frontend_set_answer("x", "maybe")
+
+    assert server.frontend_clear_answers() == {"ok": True}
+    assert service.messageBox("Erase flash?", "", 0, 2, "") == 3
+    assert server.frontend_get_prompts(clear=True)["count"] == 6
+    assert server.frontend_get_prompts() == {"hosting": False, "count": 0, "prompts": [], "progress": []}
+
+
+def test_a_failing_tool_lists_the_prompts_of_its_call(server, fake):
+    client, rpc = fake
+
+    def asks_then_fails(*args):
+        client.frontend.service.openFileDialog("Locate crt0.s", "", "", False, True)
+        raise cspy_exception(method="GetStack", message="No source")
+
+    rpc.on("contextmanager", "getStack", asks_then_fails)
+    with pytest.raises(CSpyError) as exc:
+        server.contextmanager_get_stack("", 0, 10)
+    assert str(exc.value).endswith(
+        "The backend asked the frontend during this call (answered headless):\n"
+        "  - file_dialog: 'Locate crt0.s' -> [] (default)"
+    )
 
 
 def test_libsupport_tools(server, fake):

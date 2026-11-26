@@ -11,6 +11,7 @@ from __future__ import annotations
 from ._app import envelope, get_client, mcp, require_session, set_client
 from .tools.breakpoints import *  # noqa: F401,F403
 from .tools.debugger import *  # noqa: F401,F403
+from .tools.frontend import *  # noqa: F401,F403
 from .tools.inspection import *  # noqa: F401,F403
 from .tools.listwindow import *  # noqa: F401,F403
 from .tools.options import *  # noqa: F401,F403

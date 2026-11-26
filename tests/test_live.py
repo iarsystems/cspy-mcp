@@ -64,6 +64,19 @@ def test_discovery_and_read_only_calls(server, cspy_launch):
     assert server.memory_read(0, 0, count=4)["byte_len"] == 4
 
 
+def test_stack_works_headless(server, cspy_launch):
+    # The stack makes the backend call back into a frontend; without an IDE, ours.
+    assert server.debugger_configure_and_start_session(json.dumps(cspy_launch))["ok"]
+    server.breakpoints_set_code("commit_history")
+    assert server.debugger_go_and_wait_for_core_state(desired_state=0, timeout_ms=10000)["ok"]
+    frames = [str(frame.get("functionName")) for frame in server.contextmanager_get_stack("", 0, 5)]
+    assert "commit_history" in frames[0] and any("main" in name for name in frames[1:])
+    assert "commit_history" in str(server.contextmanager_get_context_info("").get("functionName"))
+    prompts = server.frontend_get_prompts()
+    assert prompts["hosting"] is True
+    json.dumps(prompts)
+
+
 def cli_args(config) -> list[str]:
     if config.mode == "standalone":
         return ["--registry-uri", config.registry_uri]
