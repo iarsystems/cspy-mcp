@@ -2,14 +2,44 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import threading
-from typing import Any
+from typing import Any, Callable
 
-from iar_cspy import Client, Config, SessionError
+from iar_cspy import BackendUnavailableError, Client, Config, SessionError
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP(
+from ._connection_trouble import clarify
+
+
+def _clarify_unavailable_backend(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Give a tool's ``BackendUnavailableError`` the directive text an AI caller needs.
+
+    Every other error passes through unchanged. The error keeps its class,
+    ``kind`` and ``reason``; only its hint is replaced (see
+    :mod:`._connection_trouble`).
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except BackendUnavailableError as exc:
+            raise clarify(exc, registry_uri=get_client().config.registry_uri) from exc
+
+    return wrapper
+
+
+class _Server(FastMCP):
+    """FastMCP whose tools all report an unavailable backend the same way."""
+
+    def tool(self, *args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        register = super().tool(*args, **kwargs)
+        return lambda fn: register(_clarify_unavailable_backend(fn))
+
+
+mcp = _Server(
     "thrift-debugger-server",
     host=os.getenv("MCP_HOST", "127.0.0.1"),
     port=int(os.getenv("MCP_PORT", "8000")),
