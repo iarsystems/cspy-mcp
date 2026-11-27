@@ -61,6 +61,7 @@ def test_tool_inventory(server):
         "options_get_option_tree", "options_update_state", "options_commit", "options_call",
         "crun_get_default_action", "crun_set_default_action", "crun_list_rules", "crun_add_rule",
         "crun_get_messages", "crun_clear_messages",
+        "coverage_get_status", "coverage_set_enabled", "coverage_reset", "coverage_get_report", "coverage_get_xml",
     }  # fmt: skip
     assert names == expected
 
