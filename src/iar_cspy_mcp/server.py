@@ -14,6 +14,7 @@ from .tools.crun import *  # noqa: F401,F403
 from .tools.debugger import *  # noqa: F401,F403
 from .tools.inspection import *  # noqa: F401,F403
 from .tools.listwindow import *  # noqa: F401,F403
+from .tools.logs import *  # noqa: F401,F403
 from .tools.options import *  # noqa: F401,F403
 from .tools.project import *  # noqa: F401,F403
 from .tools.project_options import *  # noqa: F401,F403

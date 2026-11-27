@@ -223,7 +223,9 @@ def debugger_get_log(max_lines: int = 100) -> list[str]:
 
     Includes the output of log breakpoints (breakpoints_set_log), backend
     warnings and errors (prefixed "Warning: "/"Error: "). The server keeps
-    the most recent events only.
+    the most recent events only. With an IDE or an IarServiceLauncher,
+    logs_read("Log_Debug") has it too, with severities, source positions
+    and paging.
     """
     lines = [
         LOG_CATEGORY_PREFIXES.get(getattr(event, "cat", None), "") + str(getattr(event, "text", "") or "").rstrip("\n")

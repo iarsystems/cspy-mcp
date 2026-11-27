@@ -27,7 +27,8 @@ point wherever `iar-cspy` is installed.
 
 Also: `mcp_thrift_server/` is a deprecated shim so old `python -m mcp_thrift_server`
 configs keep working. `examples/firmware/` is the simulator program + launch.json
-used by the live tests. `docs/ide-services.md` covers the project and options
+used by the live tests. `docs/logs.md` covers the IDE log tools,
+`docs/ide-services.md` the project and options
 tools; the API guide, the hosting guide and the backend notes are in cspy-py.
 
 ## Dependency and Compatibility Notes
