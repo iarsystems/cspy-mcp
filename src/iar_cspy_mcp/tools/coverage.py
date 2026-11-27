@@ -209,6 +209,11 @@ def coverage_get_xml(max_chars: int = 200_000, refresh: bool = True) -> dict[str
 
     Prefer coverage_get_report to read it. `data.truncated` is true when the
     XML is longer than `max_chars`; `data.length` is its full length.
+
+    Important:
+        The XML format is the backend's, informational only, and may change
+        without notice. Do not build on its structure; coverage_get_report's
+        JSON is this server's contract.
     """
     require_session("coverage_get_xml")
     try:

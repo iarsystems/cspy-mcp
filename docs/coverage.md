@@ -20,6 +20,11 @@ Enable coverage before running: executions are counted only while it is on.
 The backend saves the on/off setting with the session's settings (the `.dnx`
 file), so later sessions of the same program start with it.
 
+The XML that `coverage_get_xml` returns is the backend's format:
+informational only, and it may change without notice. It is not a stable
+contract, so build on `coverage_get_report` instead, whose JSON shape this
+server keeps stable.
+
 ## Reading the report
 
 `coverage_get_report` returns `data.program` (the totals) and `data.items` at
