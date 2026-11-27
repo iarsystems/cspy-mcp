@@ -18,8 +18,16 @@ keeps what arrives, per category, so it can be read back at any time.
 - A Thrift-enabled iaride runs a forwarder while remote control is on.
 - A managed backend with an IarServiceLauncher (a full IAR installation) gets
   one loaded into the launcher.
-- CSpyServer2 alone has none: `logs_status` says so in `data.note`. Its debug
-  log is still in `debugger_get_log`.
+- CSpyServer2 alone has none: `logs_status` says so in `data.note`.
+
+The debugger's own log is category `CSpy_Debug`: the log events the debugger
+posts to this server. It needs no forwarder and is there whenever this server
+receives the debug events, so also with a managed backend, which has no
+`Log_Debug`. Each configured debug session starts a new session of it.
+`debugger_get_log` returns its latest lines. When an IDE runs the session,
+`Log_Debug` has the same lines (with a timestamp in the text) and `CSpy_Debug`
+may have none; `logs_status`'s `data.debug_log` names the one with the newest
+entry.
 
 The forwarder does not replay anything logged before the server listened, so
 the server registers at startup, and again before every IDE service call
@@ -102,5 +110,6 @@ server does not receive the IDE's logs; `output_tail` is there either way.
 ## Errors
 
 `LOGS_UNAVAILABLE` (retryable): the server is not listening, because no
-registry is reachable yet or `THRIFT_AUTO_LOG_SERVICE=0`. `INVALID_ARGUMENT`:
+registry is reachable yet or `THRIFT_AUTO_LOG_SERVICE=0`. `CSpy_Debug` (and
+reading without a `category`) still works then, with a `data.note`. `INVALID_ARGUMENT`:
 a bad severity, session, regex, position or format.

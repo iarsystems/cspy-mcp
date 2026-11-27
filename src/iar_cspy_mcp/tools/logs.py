@@ -6,6 +6,10 @@ logs come from the IDE platform's log forwarder, which posts to a
 registered is replayed, so the server registers it at startup and again
 before every IDE service call (``client.logs.auto_ensure``).
 
+The debugger's own log is category ``CSpy_Debug``: the log events the
+debugger posts to this server, also without an IDE (``debugger_get_log``
+reads it too). It needs no forwarder, so it can be read while not listening.
+
 Reading pages by stream position: every entry has a ``seq`` that never
 changes, and every result says where it is (``page``). Pass ``page.last_seq``
 as ``after`` for what came next, ``page.first_seq`` as ``before`` for what came
@@ -21,7 +25,7 @@ from typing import Any
 
 from iar_cspy import CSpyError
 from iar_cspy.errors import error_entry
-from iar_cspy.logs import PROBLEM_SEVERITIES, SEVERITY_PREFIXES
+from iar_cspy.logs import DEBUGGER_LOG, PROBLEM_SEVERITIES, SEVERITY_PREFIXES
 from iar_cspy.types import LogEntry, LogSeverity
 
 from .._app import envelope, get_client, mcp
@@ -52,11 +56,22 @@ def _listening() -> dict[str, Any]:
     elif client.backend.mode == "managed" and not client.backend.has_launcher:
         out["note"] = (
             "This backend is CSpyServer2 only and has no log forwarder, so no IDE logs arrive. "
-            "The debug log is in debugger_get_log."
+            f"The debug log is category {DEBUGGER_LOG}."
         )
     elif isinstance(status["forwarder"], dict) and status["forwarder"].get("status") == "error":
         out["note"] = "The log forwarder failed to load into the IarServiceLauncher; see forwarder.error."
     return out
+
+
+def _readable(listening: dict[str, Any], category: str | None) -> bool:
+    """Whether there is anything to read: the debugger's log needs no forwarder."""
+    return bool(listening["listening"]) or category in (None, DEBUGGER_LOG)
+
+
+def _debug_log_category(summary: Any) -> str | None:
+    """Of Log_Debug (an IDE's) and CSpy_Debug (the debugger's), the one with the newest entry."""
+    found = [c for c in summary.categories if c.name in ("Log_Debug", DEBUGGER_LOG) and c.last_seq is not None]
+    return max(found, key=lambda c: c.last_seq).name if found else None
 
 
 def _unavailable(tool: str, listening: dict[str, Any]) -> dict[str, Any]:
@@ -165,17 +180,20 @@ def logs_status() -> dict[str, Any]:
     """Whether this server receives the IDE's logs, and what each log holds.
 
     Each category is one of the IDE's logs (Log_Build, Log_Debug,
-    Log_Tool_Output, ...) with: open (the IDE has it now), session (bumped
+    Log_Tool_Output, ...), or CSpy_Debug, the debugger's own log, with: open (the IDE has it now), session (bumped
     each time the IDE restarts that log, e.g. a new build), entries stored,
     errors and warnings in the current session, and last_seq. `mark` is the
     stream position now: logs_read(after=mark) returns only what comes later.
+
+    `debug_log` names the category with the debug log: Log_Debug when an IDE
+    runs the session, CSpy_Debug otherwise (whichever has the newest entry).
 
     Nothing logged before `listening_since` can be read: the IDE does not
     replay its logs.
     """
     listening = _listening()
-    logs = get_client().logs
-    data = {**listening, **logs.summary().to_dict()}
+    summary = get_client().logs.summary()
+    data = {**listening, **summary.to_dict(), "debug_log": _debug_log_category(summary)}
     return envelope(ok=True, tool="logs_status", data=data)
 
 
@@ -201,6 +219,7 @@ def logs_read(
 
     Args:
         category: One log (Log_Build, Log_Debug, ...; see logs_status), or all.
+            CSpy_Debug is the debugger's own log, also without an IDE.
             Without one, each line starts with its [category].
         session: "current" (each log since the IDE last restarted it), "all",
             or a session number.
@@ -229,7 +248,7 @@ def logs_read(
     """
     tool = "logs_read"
     listening = _listening()
-    if not listening["listening"]:
+    if not _readable(listening, category or None):
         return _unavailable(tool, listening)
     fmt = str(format).strip().lower()
     try:
@@ -249,6 +268,8 @@ def logs_read(
         return _bad_args(tool, exc)
     data = _shape_page(page, fmt, with_category=not category)
     data["listening_since"] = listening["listening_since"]
+    if not listening["listening"]:
+        data["note"] = f"Only the debugger's own log ({DEBUGGER_LOG}): {listening.get('note', '')}".strip()
     return envelope(ok=True, tool=tool, data=data)
 
 
@@ -277,7 +298,7 @@ def logs_wait_for(
     """
     tool = "logs_wait_for"
     listening = _listening()
-    if not listening["listening"]:
+    if not _readable(listening, category or None):
         return _unavailable(tool, listening)
     logs = get_client().logs
     try:

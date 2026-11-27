@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,7 +57,7 @@ def not_listening():
 
 
 def test_read_without_a_listener_is_an_unavailable_envelope(server, not_listening):
-    out = server.logs_read()
+    out = server.logs_read("Log_Build")
     assert out["ok"] is False
     assert out["error"]["code"] == "LOGS_UNAVAILABLE"
     assert "THRIFT_AUTO_LOG_SERVICE" in out["error"]["message"]
@@ -221,7 +222,7 @@ def test_status_explains_a_backend_without_a_forwarder(server):
         server_module.set_client(None)
         client.close()
     assert data["listening"] is True
-    assert "debugger_get_log" in data.get("note", "")
+    assert "CSpy_Debug" in data.get("note", "")
 
 
 def test_highlighted_lines_are_not_problems(server, listening):
@@ -256,3 +257,39 @@ def test_highlighted_lines_are_not_problems(server, listening):
     assert "Build failed" in prominent and "Resolving dependencies..." in prominent
     [build_log] = server.logs_status()["data"]["categories"]
     assert (build_log["errors"], build_log["warnings"]) == (1, 1)
+
+
+def debugger_log(client, cat, text) -> None:
+    client.events.server.handler.postLogEvent(SimpleNamespace(cat=cat, text=text, timestamp=0))
+
+
+def test_debugger_get_log_keeps_its_shape(server, fake):
+    client, _ = fake
+    debugger_log(client, 1, "Download complete.\n")
+    debugger_log(client, 2, "Breakpoint moved")
+    debugger_log(client, 3, "Flash failed")
+    assert server.debugger_get_log() == ["Download complete.", "Warning: Breakpoint moved", "Error: Flash failed"]
+    assert server.debugger_get_log(max_lines=1) == ["Error: Flash failed"]
+    assert server.debugger_get_log(max_lines=0) == []
+
+
+def test_the_debuggers_log_is_readable_without_a_forwarder(server, not_listening):
+    client, _ = not_listening
+    debugger_log(client, 3, "Flash failed")
+
+    out = server.logs_read("CSpy_Debug", problems=True)
+    assert out["ok"] is True and out["data"]["text"] == "Error: Flash failed"
+    everything = server.logs_read()["data"]
+    assert everything["text"] == "[CSpy_Debug] Error: Flash failed"
+    assert "THRIFT_AUTO_LOG_SERVICE" in everything["note"]
+    found = server.logs_wait_for("flash", category="CSpy_Debug", after=0, timeout_ms=10)["data"]
+    assert found["found"] is True
+
+
+def test_status_names_the_category_with_the_debug_log(server, listening):
+    client, _ = listening
+    assert server.logs_status()["data"]["debug_log"] is None
+    debugger_log(client, 1, "Download complete.")
+    assert server.logs_status()["data"]["debug_log"] == "CSpy_Debug"
+    post(client, category="Log_Debug", text="Download complete.")
+    assert server.logs_status()["data"]["debug_log"] == "Log_Debug"
