@@ -132,7 +132,8 @@ we recommend using the latest IAR product version for your architecture, if poss
   appears, so it can start before the backend does.
 
 See [docs/ide-services.md](docs/ide-services.md) for the IDE services,
-[docs/crun.md](docs/crun.md) for the C-RUN runtime-checking tools, and
+[docs/crun.md](docs/crun.md) for the C-RUN runtime-checking tools,
+[docs/logs.md](docs/logs.md) for the IDE's logs (Build, Debug Log, ...), and
 cspy-py's docs for the rest:
 [guide.md](https://github.com/iarsystems/cspy-py/blob/main/docs/guide.md) for
 the full connection reference,
@@ -196,6 +197,7 @@ runs the unit and live tests.
 | List windows | `listwindow_list_services`, `listwindow_get_overview`, `listwindow_get_rows`, `listwindow_sliding_navigate`, `listwindow_get_notifications`, `listwindow_trace_status`, `listwindow_trace_set_enabled`, `listwindow_trace_clear` |
 | Projects | `project_load_workspace`, `project_status`, `project_get_files`, `project_build`, `project_get_launch_config`, `project_configure_and_start_debug` |
 | Options | `options_create_session`, `options_get_category_tree`, `options_get_option_tree`, `options_update_state`, `options_commit`, `options_destroy_session` |
+| IDE logs | `logs_status`, `logs_read`, `logs_wait_for` |
 | IDE services | `ide_services_status`, `ide_services_ensure`, `ide_services_stop_launcher` |
 | Discovery | `thrift_connection_info`, `debugger_list_methods`, `debugger_error_taxonomy` |
 | Raw RPC | `debugger_call`, `projectmanager_call`, `options_call` |

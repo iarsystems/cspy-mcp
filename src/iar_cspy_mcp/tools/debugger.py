@@ -7,7 +7,7 @@ from typing import Any
 from iar_cspy import StopResult, format_registry_uri, to_plain
 from iar_cspy.debugger import PRE_SESSION_METHODS
 from iar_cspy.errors import DC_RESULTS, ERROR_CODES, FOCUSED_DC_RESULTS, error_entry
-from iar_cspy.events import LOG_CATEGORY_PREFIXES
+from iar_cspy.logs import DEBUGGER_LOG, SEVERITY_PREFIXES
 
 from .._app import envelope, get_client, mcp, require_session
 from .._connection_trouble import add_connection_guidance
@@ -222,15 +222,13 @@ def debugger_get_log(max_lines: int = 100) -> list[str]:
     """The latest lines of the debug log (the IDE's Debug Log), oldest first.
 
     Includes the output of log breakpoints (breakpoints_set_log), backend
-    warnings and errors (prefixed "Warning: "/"Error: "). The server keeps
-    the most recent events only.
+    warnings and errors (prefixed "Warning: "/"Error: "). For paging,
+    filtering and waiting, the same lines are logs_read("CSpy_Debug").
     """
-    lines = [
-        LOG_CATEGORY_PREFIXES.get(getattr(event, "cat", None), "") + str(getattr(event, "text", "") or "").rstrip("\n")
-        for kind, event in get_client().events.recent()
-        if kind == "log"
-    ]
-    return lines[-int(max_lines):] if max_lines > 0 else []
+    if max_lines <= 0:
+        return []
+    entries = get_client().logs.entries(DEBUGGER_LOG, limit=int(max_lines))
+    return [SEVERITY_PREFIXES.get(e.severity, "") + e.text.rstrip("\n") for e in entries]
 
 
 @mcp.tool()

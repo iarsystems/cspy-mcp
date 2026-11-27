@@ -78,6 +78,10 @@ def main(argv: list[str] | None = None) -> None:
             client.close()
             return
 
+    # The IDE does not replay its logs: listen from the start, not from the
+    # first logs_* call. Best effort; IDE service calls retry it.
+    client.logs.auto_ensure()
+
     mount_path = os.getenv("MCP_MOUNT_PATH")
     if transport == "stdio":
         print("MCP server ready (stdio). Waiting for an MCP client connection...", file=sys.stderr, flush=True)

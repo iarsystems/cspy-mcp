@@ -16,6 +16,7 @@ from iar_cspy.types import BuildResult
 from .._app import envelope, get_client, mcp
 from .._connection_trouble import add_connection_guidance
 from ._args import call_with_json_args
+from .logs import build_problems
 
 
 def _no_project_hint(exc: CSpyError) -> CSpyError:
@@ -54,13 +55,15 @@ def resolve_project(project_path: str, config_name: str) -> tuple[dict[str, Any]
         raise _no_project_hint(exc) from exc
 
 
-def _build_data(result: BuildResult, max_output_lines: int) -> dict[str, Any]:
+def _build_data(result: BuildResult, max_output_lines: int, log_mark: int) -> dict[str, Any]:
+    """The build result; ``problems`` from the IDE's Build log since ``log_mark``, or None without it."""
     return {
         "project": result.project,
         "configuration": result.configuration,
         "succeeded": result.succeeded,
         "output_lines_total": len(result.output),
         "output_tail": result.tail(max_output_lines),
+        "problems": build_problems(log_mark),
     }
 
 
@@ -144,7 +147,11 @@ def project_build(
     """Build a project configuration synchronously via ProjectManager.BuildProject.
 
     A failed build is reported as ok=False with the tool output tail in data;
-    it does not raise, so build errors stay readable. ProjectManager refusing
+    it does not raise, so build errors stay readable. `data.problems` has the
+    warnings and errors from the IDE's Build log (path, line, detail lines;
+    at most 50, plus counts), or is null when this server does not receive
+    the IDE's logs; logs_read("Log_Build", problems=true, after=problems.after)
+    pages on. ProjectManager refusing
     the call outright because it is busy (a modal dialog, build, or analysis
     already in progress) is also reported as ok=False, with a retryable
     PROJECTMANAGER_BUSY error instead of a build output tail.
@@ -156,12 +163,13 @@ def project_build(
         max_output_lines: Maximum trailing build-output lines to return.
     """
     ctx, cfg_name = resolve_project(project_path, config_name)
+    log_mark = get_client().logs.mark()
     try:
         result = get_client().project.build(ctx["filename"], cfg_name, jobs=int(num_parallel_builds))
     except BusyError as exc:
         data = {"project": ctx, "configuration": cfg_name}
         return envelope(ok=False, tool="project_build", data=data, error=_busy(exc))
-    data = _build_data(result, max_output_lines)
+    data = _build_data(result, max_output_lines, log_mark)
     if result.succeeded:
         return envelope(ok=True, tool="project_build", data=data)
     return envelope(ok=False, tool="project_build", data=data, error=_build_failed(result))
@@ -224,6 +232,7 @@ def project_configure_and_start_debug(
         max_output_lines: Maximum trailing build-output lines to return.
     """
     ctx, cfg_name = resolve_project(project_path, config_name)
+    log_mark = get_client().logs.mark()
     try:
         result = get_client().project.start_debugging(
             ctx["filename"],
@@ -237,7 +246,7 @@ def project_configure_and_start_debug(
         return envelope(ok=False, tool="project_configure_and_start_debug", data=data, error=_busy(exc))
     data: dict[str, Any] = {"project": result.project, "configuration": result.configuration}
     if result.build is not None:
-        data["build"] = _build_data(result.build, max_output_lines)
+        data["build"] = _build_data(result.build, max_output_lines, log_mark)
         if not result.build.succeeded:
             return envelope(
                 ok=False,
