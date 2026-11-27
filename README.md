@@ -132,7 +132,8 @@ we recommend using the latest IAR product version for your architecture, if poss
   appears, so it can start before the backend does.
 
 See [docs/ide-services.md](docs/ide-services.md) for the IDE services,
-[docs/crun.md](docs/crun.md) for the C-RUN runtime-checking tools, and
+[docs/crun.md](docs/crun.md) for the C-RUN runtime-checking tools,
+[docs/coverage.md](docs/coverage.md) for the code coverage tools, and
 cspy-py's docs for the rest:
 [guide.md](https://github.com/iarsystems/cspy-py/blob/main/docs/guide.md) for
 the full connection reference,
